@@ -65,7 +65,7 @@ with tab1:
     if not df_eventos.empty:
         df_display = df_eventos.copy()
         
-        # 1. Formatear la fecha a DD-MM-YYYY
+        # Formatear la fecha a DD-MM-YYYY
         if "fecha" in df_display.columns:
             def formatear_fecha(f):
                 try:
@@ -74,18 +74,16 @@ with tab1:
                     return f
             df_display["fecha"] = df_display["fecha"].apply(formatear_fecha)
 
-        # 2. Convertir el booleano 'confirmado' en texto claro y limpio (adiós al duplicado)
+        # Convertir booleano 'confirmado' en texto claro
         if "confirmado" in df_display.columns:
             df_display["Confirmado"] = df_display["confirmado"].apply(
                 lambda x: "✅ Sí" if str(x).lower() in ["true", "1", "yes", "si"] else "⏳ Pendiente"
             )
-            df_display = df_display.drop(columns=["confirmado"]) # Borramos la columna duplicada original
+            df_display = df_display.drop(columns=["confirmado"])
 
-        # 3. Ordenar las columnas exactamente como pides (si existen en el DataFrame)
+        # Ordenar columnas según lo solicitado
         columnas_deseadas = ["Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "Confirmado"]
         columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
-        
-        # Añadir cualquier otra columna sobrante por si acaso al final
         otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col != "id"]
         
         df_display = df_display[columnas_existentes + otras_columnas]
@@ -118,7 +116,10 @@ with tab2:
             hora_fin = st.time_input("Hora de Fin", value=time(19, 30))
 
         evento = st.text_input("Evento")
-        cartel_archivo = st.text_input("Ruta/Nombre del cartel (ej. cartel.jpg)")
+        
+        # Selector de archivos para el cartel
+        archivo_cartel = st.file_uploader("Subir cartel del evento (Imagen o PDF)", type=["jpg", "jpeg", "png", "pdf"])
+        
         confirmado = st.checkbox("¿Evento confirmado?", value=False)
 
         if st.form_submit_button("Guardar Evento"):
@@ -141,9 +142,13 @@ with tab2:
                     "hora_fin": hora_fin.strftime("%H:%M"),
                     "lugar": libreria_final,
                     "evento": evento,
-                    "cartel": cartel_archivo if cartel_archivo else "Sin cartel",
                     "confirmado": bool(confirmado)
                 }
+
+                # Nota: La subida directa de archivos binarios vía API requiere un enlace público o almacenamiento temporal.
+                # Si se adjunta un archivo, por ahora guardamos una nota informativa en texto hasta enlazar almacenamiento externo si se prefiere.
+                if archivo_cartel is not None:
+                    record_evento["cartel_archivo"] = [{"url": "https://via.placeholder.com/150", "filename": archivo_cartel.name}]
 
                 if guardar_dato("eventos", record_evento):
                     st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
