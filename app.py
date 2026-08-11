@@ -6,9 +6,8 @@ from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
-st.caption("Gestión interna sincronizada permanentemente con Google Sheets.")
+st.caption("Gestión interna sincronizada con Google Sheets.")
 
-# Conexión
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def cargar_tabla(nombre_pestaña):
@@ -20,15 +19,25 @@ def cargar_tabla(nombre_pestaña):
 
 def guardar_fila(nombre_pestaña, fila_datos):
     url = st.secrets["connections"]["gsheets"].get("web_app_url", "")
-    if url:
-        payload = {
-            "sheet": nombre_pestaña,
-            "action": "append",
-            "row": fila_datos
-        }
-        response = requests.post(url, json=payload)
-        return response.status_code == 200
-    return False
+    if not url:
+        st.error("❌ Falta la 'web_app_url' en los Secrets de Streamlit.")
+        return False
+        
+    payload = {
+        "sheet": nombre_pestaña,
+        "action": "append",
+        "row": fila_datos
+    }
+    try:
+        response = requests.post(url, json=payload, allow_redirects=True, timeout=10)
+        if response.status_code == 200:
+            return True
+        else:
+            st.error(f"❌ Error de respuesta de Google (Código {response.status_code}): {response.text}")
+            return False
+    except Exception as e:
+        st.error(f"❌ Error al enviar los datos a Google Apps Script: {e}")
+        return False
 
 # Cargar datos
 df_eventos = cargar_tabla("eventos")
@@ -115,6 +124,7 @@ with tab3:
         if nuevo_a.strip():
             if guardar_fila("autores", [nuevo_a.strip()]):
                 st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
+                st.cache_data.clear()
                 st.rerun()
     st.dataframe(df_autores, use_container_width=True, hide_index=True)
 
@@ -126,5 +136,6 @@ with tab4:
         if nueva_l.strip():
             if guardar_fila("librerias", [nueva_l.strip()]):
                 st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
+                st.cache_data.clear()
                 st.rerun()
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
