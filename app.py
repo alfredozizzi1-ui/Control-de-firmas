@@ -20,22 +20,24 @@ except Exception as e:
     st.error("⚠️ Configura las claves de Airtable en los Secrets de Streamlit.")
     st.stop()
 
-# Función para cargar datos de Airtable
-def cargar_datos(tabla):
+# Función con caché de 10 segundos para evitar saturar la API (Error 429)
+@st.cache_data(ttl=10)
+def cargar_datos(nombre_tabla):
     try:
+        tabla = api.table(base_id, nombre_tabla)
         records = tabla.all()
         if not records:
             return pd.DataFrame()
         data = [r["fields"] for r in records]
         return pd.DataFrame(data)
     except Exception as e:
-        st.error(f"Error al leer la tabla: {e}")
+        st.error(f"Error al cargar {nombre_tabla}: {e}")
         return pd.DataFrame()
 
-# Cargar datos actuales
-df_eventos = cargar_datos(table_eventos)
-df_autores = cargar_datos(table_autores)
-df_librerias = cargar_datos(table_librerias)
+# Cargar datos desde caché
+df_eventos = cargar_datos("eventos")
+df_autores = cargar_datos("autores")
+df_librerias = cargar_datos("librerias")
 
 lista_autores = df_autores["Nombre"].dropna().astype(str).tolist() if not df_autores.empty and "Nombre" in df_autores.columns else []
 lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df_librerias.empty and "Nombre" in df_librerias.columns else []
@@ -108,6 +110,7 @@ with tab2:
                     }
 
                     table_eventos.create(record_evento)
+                    st.cache_data.clear()  # Limpia la caché al guardar para actualizar de inmediato
                     st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
                     st.rerun()
                 except Exception as ex:
@@ -121,6 +124,7 @@ with tab3:
         if nuevo_a.strip():
             try:
                 table_autores.create({"Nombre": nuevo_a.strip()})
+                st.cache_data.clear()  # Limpia la caché para mostrar el nuevo autor al instante
                 st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
                 st.rerun()
             except Exception as ex:
@@ -135,6 +139,7 @@ with tab4:
         if nueva_l.strip():
             try:
                 table_librerias.create({"Nombre": nueva_l.strip()})
+                st.cache_data.clear()  # Limpia la caché para mostrar la nueva librería al instante
                 st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
                 st.rerun()
             except Exception as ex:
