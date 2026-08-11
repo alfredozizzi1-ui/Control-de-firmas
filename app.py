@@ -1,50 +1,40 @@
 import streamlit as st
 import pandas as pd
-import requests
 from datetime import datetime, time
-from streamlit_gsheets import GSheetsConnection
+from pyairtable import Api
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
-st.caption("Gestión interna sincronizada permanentemente con Google Sheets.")
+st.caption("Gestión interna sincronizada en tiempo real con Airtable.")
 
-# Conexión sin caché para lectura instantánea en tiempo real
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Inicializar conexión con Airtable
+try:
+    api_key = st.secrets["airtable"]["api_key"]
+    base_id = st.secrets["airtable"]["base_id"]
+    api = Api(api_key)
+    
+    table_eventos = api.table(base_id, "eventos")
+    table_autores = api.table(base_id, "autores")
+    table_librerias = api.table(base_id, "librerias")
+except Exception as e:
+    st.error("⚠️ Configura las claves de Airtable en los Secrets de Streamlit.")
+    st.stop()
 
-def cargar_tabla(nombre_pestaña):
+# Función para cargar datos de Airtable
+def cargar_datos(tabla):
     try:
-        # ttl=0 fuerza a leer los datos frescos directamente de Google Sheets
-        df = conn.read(worksheet=nombre_pestaña, ttl=0)
-        return df.dropna(how="all")
+        records = tabla.all()
+        if not records:
+            return pd.DataFrame()
+        data = [r["fields"] for r in records]
+        return pd.DataFrame(data)
     except Exception:
         return pd.DataFrame()
 
-def guardar_fila(nombre_pestaña, fila_datos):
-    url = st.secrets["connections"]["gsheets"].get("web_app_url", "")
-    if not url:
-        st.error("❌ Falta la 'web_app_url' en los Secrets de Streamlit.")
-        return False
-        
-    payload = {
-        "sheet": nombre_pestaña,
-        "action": "append",
-        "row": fila_datos
-    }
-    try:
-        response = requests.post(url, json=payload, allow_redirects=True, timeout=10)
-        if response.status_code == 200:
-            return True
-        else:
-            st.error(f"❌ Error de respuesta de Google (Código {response.status_code}): {response.text}")
-            return False
-    except Exception as e:
-        st.error(f"❌ Error al enviar los datos a Google Apps Script: {e}")
-        return False
-
-# Cargar datos en tiempo real de la hoja
-df_eventos = cargar_tabla("eventos")
-df_autores = cargar_tabla("autores")
-df_librerias = cargar_tabla("librerias")
+# Cargar datos actuales
+df_eventos = cargar_datos(table_eventos)
+df_autores = cargar_datos(table_autores)
+df_librerias = cargar_datos(table_librerias)
 
 lista_autores = df_autores["Nombre"].dropna().astype(str).tolist() if not df_autores.empty and "Nombre" in df_autores.columns else []
 lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df_librerias.empty and "Nombre" in df_librerias.columns else []
@@ -58,11 +48,11 @@ with tab1:
         df_display = df_eventos.copy()
         if "confirmado" in df_display.columns:
             df_display["Confirmado"] = df_display["confirmado"].apply(
-                lambda x: "✅ Sí" if str(x).upper() in ["TRUE", "1", "YES", "SI"] else "⏳ Pendiente"
+                lambda x: "✅ Sí" if str(x).lower() in ["true", "1", "yes", "si"] else "⏳ Pendiente"
             )
         st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
-        st.info("No hay eventos registrados en la hoja de cálculo.")
+        st.info("No hay eventos registrados en Airtable.")
 
 # TAB 2: NUEVO EVENTO
 with tab2:
@@ -96,27 +86,28 @@ with tab2:
                 st.error("Por favor completa el autor y la librería.")
             else:
                 if autor_final not in lista_autores:
-                    guardar_fila("autores", [autor_final])
+                    table_autores.create({"Nombre": autor_final})
 
                 if libreria_final not in lista_librerias:
-                    guardar_fila("librerias", [libreria_final])
+                    table_librerias.create({"Nombre": libreria_final})
 
-                nuevo_id = int(df_eventos["id"].max() + 1) if not df_eventos.empty and "id" in df_eventos.columns else 1
-                fila_ev = [
-                    nuevo_id,
-                    autor_final,
-                    str(fecha),
-                    hora_inicio.strftime("%H:%M"),
-                    hora_fin.strftime("%H:%M"),
-                    libreria_final,
-                    evento,
-                    cartel_archivo if cartel_archivo else "Sin cartel",
-                    "TRUE" if confirmado else "FALSE"
-                ]
+                nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns and not df_eventos["id"].isnull().all() else 1
+                
+                record_evento = {
+                    "id": str(nuevo_id),
+                    "Autor": autor_final,
+                    "fecha": str(fecha),
+                    "hora_inicio": hora_inicio.strftime("%H:%M"),
+                    "hora_fin": hora_fin.strftime("%H:%M"),
+                    "lugar": libreria_final,
+                    "evento": evento,
+                    "cartel": cartel_archivo if cartel_archivo else "Sin cartel",
+                    "confirmado": bool(confirmado)
+                }
 
-                if guardar_fila("eventos", fila_ev):
-                    st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
-                    st.rerun()
+                table_eventos.create(record_evento)
+                st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
+                st.rerun()
 
 # TAB 3: AUTORES
 with tab3:
@@ -124,9 +115,9 @@ with tab3:
     nuevo_a = st.text_input("Añadir autor al catálogo")
     if st.button("Guardar Autor"):
         if nuevo_a.strip():
-            if guardar_fila("autores", [nuevo_a.strip()]):
-                st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
-                st.rerun()
+            table_autores.create({"Nombre": nuevo_a.strip()})
+            st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
+            st.rerun()
     st.dataframe(df_autores, use_container_width=True, hide_index=True)
 
 # TAB 4: LIBRERÍAS
@@ -135,7 +126,7 @@ with tab4:
     nueva_l = st.text_input("Añadir librería al catálogo")
     if st.button("Guardar Librería"):
         if nueva_l.strip():
-            if guardar_fila("librerias", [nueva_l.strip()]):
-                st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
-                st.rerun()
+            table_librerias.create({"Nombre": nueva_l.strip()})
+            st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
+            st.rerun()
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
