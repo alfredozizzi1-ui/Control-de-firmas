@@ -59,23 +59,19 @@ lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df
 
 tab1, tab2, tab3, tab4 = st.tabs(["📅 Listado de Eventos", "➕ Registrar Nuevo Evento", "👤 Listado de Autores", "🏛️ Listado de Librerías"])
 
-# TAB 1: EVENTOS (Filtrando eventos pasados)
+# TAB 1: EVENTOS
 with tab1:
     st.header("Eventos Próximos Programados")
     if not df_eventos.empty:
         df_display = df_eventos.copy()
         
-        # Filtrar solo eventos con fecha de hoy en adelante (manteniéndolos intactos en Airtable)
         if "fecha" in df_display.columns:
-            # Convertir la columna fecha a formato datetime para comparar
             df_display["fecha_dt"] = pd.to_datetime(df_display["fecha"], errors='coerce').dt.date
             hoy = date.today()
-            # Nos quedamos solo con los eventos cuya fecha sea mayor o igual a hoy
             df_display = df_display[df_display["fecha_dt"] >= hoy]
             df_display = df_display.drop(columns=["fecha_dt"])
 
         if not df_display.empty:
-            # Formatear la fecha a DD-MM-YYYY para mostrarla bonita
             def formatear_fecha(f):
                 try:
                     return pd.to_datetime(f).strftime("%d-%m-%Y")
@@ -83,14 +79,12 @@ with tab1:
                     return f
             df_display["fecha"] = df_display["fecha"].apply(formatear_fecha)
 
-            # Convertir booleano 'confirmado' en texto claro
             if "confirmado" in df_display.columns:
                 df_display["Confirmado"] = df_display["confirmado"].apply(
                     lambda x: "✅ Sí" if str(x).lower() in ["true", "1", "yes", "si"] else "⏳ Pendiente"
                 )
                 df_display = df_display.drop(columns=["confirmado"])
 
-            # Ordenar columnas según lo solicitado
             columnas_deseadas = ["Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "Confirmado"]
             columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
             otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col != "id"]
@@ -103,7 +97,7 @@ with tab1:
     else:
         st.info("No hay eventos registrados en Airtable.")
 
-# TAB 2: NUEVO EVENTO
+# TAB 2: NUEVO EVENTO (Fecha en formato texto europeo DD-MM-YYYY)
 with tab2:
     st.header("Dar de alta un nuevo evento")
     col_sel1, col_sel2 = st.columns(2)
@@ -120,7 +114,7 @@ with tab2:
     with st.form("form_nuevo_evento"):
         col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
-            fecha = st.date_input("Fecha")
+            fecha_texto = st.text_input("Fecha (DD-MM-YYYY)", value=date.today().strftime("%d-%m-%Y"), placeholder="Ej. 29-09-2026")
         with col_f2:
             hora_inicio = st.time_input("Hora de Inicio", value=time(18, 0))
         with col_f3:
@@ -134,6 +128,13 @@ with tab2:
             if not autor_final or not libreria_final:
                 st.error("Por favor completa el autor y la librería.")
             else:
+                # Validar y convertir la fecha escrita a formato ISO para Airtable (YYYY-MM-DD)
+                try:
+                    fecha_convertida = datetime.strptime(fecha_texto.strip(), "%d-%m-%Y").strftime("%Y-%m-%d")
+                except ValueError:
+                    st.error("❌ El formato de la fecha es incorrecto. Debe ser DD-MM-YYYY (ej. 29-09-2026).")
+                    st.stop()
+
                 if autor_final not in lista_autores:
                     guardar_dato("autores", {"Nombre": autor_final})
 
@@ -145,7 +146,7 @@ with tab2:
                 record_evento = {
                     "id": str(nuevo_id),
                     "Autor": autor_final,
-                    "fecha": str(fecha),
+                    "fecha": fecha_convertida,
                     "hora_inicio": hora_inicio.strftime("%H:%M"),
                     "hora_fin": hora_fin.strftime("%H:%M"),
                     "lugar": libreria_final,
