@@ -30,10 +30,8 @@ def cargar_datos(nombre_tabla):
                 return pd.DataFrame()
             return pd.DataFrame([r["fields"] for r in records])
         else:
-            st.error(f"Error {respuesta.status_code} al cargar {nombre_tabla}: {respuesta.text}")
             return pd.DataFrame()
-    except Exception as e:
-        st.error(f"Fallo de conexión al cargar {nombre_tabla}: {e}")
+    except Exception:
         return pd.DataFrame()
 
 def guardar_dato(nombre_tabla, datos):
@@ -45,10 +43,10 @@ def guardar_dato(nombre_tabla, datos):
             st.cache_data.clear()
             return True
         else:
-            st.error(f"Error {respuesta.status_code} al guardar en {nombre_tabla}: {respuesta.text}")
+            st.error(f"Error al guardar: {respuesta.text}")
             return False
     except Exception as e:
-        st.error(f"Fallo de conexión al guardar: {e}")
+        st.error(f"Fallo de conexión: {e}")
         return False
 
 # Cargar datos
@@ -66,10 +64,32 @@ with tab1:
     st.header("Eventos Programados")
     if not df_eventos.empty:
         df_display = df_eventos.copy()
+        
+        # 1. Formatear la fecha a DD-MM-YYYY
+        if "fecha" in df_display.columns:
+            def formatear_fecha(f):
+                try:
+                    return pd.to_datetime(f).strftime("%d-%m-%Y")
+                except Exception:
+                    return f
+            df_display["fecha"] = df_display["fecha"].apply(formatear_fecha)
+
+        # 2. Convertir el booleano 'confirmado' en texto claro y limpio (adiós al duplicado)
         if "confirmado" in df_display.columns:
             df_display["Confirmado"] = df_display["confirmado"].apply(
                 lambda x: "✅ Sí" if str(x).lower() in ["true", "1", "yes", "si"] else "⏳ Pendiente"
             )
+            df_display = df_display.drop(columns=["confirmado"]) # Borramos la columna duplicada original
+
+        # 3. Ordenar las columnas exactamente como pides (si existen en el DataFrame)
+        columnas_deseadas = ["Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "Confirmado"]
+        columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
+        
+        # Añadir cualquier otra columna sobrante por si acaso al final
+        otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col != "id"]
+        
+        df_display = df_display[columnas_existentes + otras_columnas]
+
         st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
         st.info("No hay eventos registrados en Airtable.")
