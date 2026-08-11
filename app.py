@@ -125,7 +125,7 @@ with tab1:
     else:
         st.info("No hay eventos registrados en Airtable.")
 
-# TAB 2: NUEVO EVENTO
+# TAB 2: NUEVO EVENTO (clear_on_submit=True activa la limpieza automática)
 with tab2:
     st.header("Dar de alta un nuevo evento")
     col_sel1, col_sel2 = st.columns(2)
@@ -139,7 +139,7 @@ with tab2:
         lib_sel = st.selectbox("Seleccionar Lugar / Librería", opciones_librerias, key="nuevo_lib_sel")
         libreria_final = st.text_input("Nombre de la nueva librería", key="nuevo_lib_txt").strip() if lib_sel == "➕ Añadir nueva librería..." else lib_sel
 
-    with st.form("form_nuevo_evento"):
+    with st.form("form_nuevo_evento", clear_on_submit=True):
         col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
             fecha_sel = st.date_input("Fecha", value=date.today())
