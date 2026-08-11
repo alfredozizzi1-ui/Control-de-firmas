@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime, time
+from datetime import datetime, time, date
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
@@ -59,14 +59,23 @@ lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df
 
 tab1, tab2, tab3, tab4 = st.tabs(["📅 Listado de Eventos", "➕ Registrar Nuevo Evento", "👤 Listado de Autores", "🏛️ Listado de Librerías"])
 
-# TAB 1: EVENTOS
+# TAB 1: EVENTOS (Filtrando eventos pasados)
 with tab1:
-    st.header("Eventos Programados")
+    st.header("Eventos Próximos Programados")
     if not df_eventos.empty:
         df_display = df_eventos.copy()
         
-        # Formatear la fecha a DD-MM-YYYY
+        # Filtrar solo eventos con fecha de hoy en adelante (manteniéndolos intactos en Airtable)
         if "fecha" in df_display.columns:
+            # Convertir la columna fecha a formato datetime para comparar
+            df_display["fecha_dt"] = pd.to_datetime(df_display["fecha"], errors='coerce').dt.date
+            hoy = date.today()
+            # Nos quedamos solo con los eventos cuya fecha sea mayor o igual a hoy
+            df_display = df_display[df_display["fecha_dt"] >= hoy]
+            df_display = df_display.drop(columns=["fecha_dt"])
+
+        if not df_display.empty:
+            # Formatear la fecha a DD-MM-YYYY para mostrarla bonita
             def formatear_fecha(f):
                 try:
                     return pd.to_datetime(f).strftime("%d-%m-%Y")
@@ -74,21 +83,23 @@ with tab1:
                     return f
             df_display["fecha"] = df_display["fecha"].apply(formatear_fecha)
 
-        # Convertir booleano 'confirmado' en texto claro
-        if "confirmado" in df_display.columns:
-            df_display["Confirmado"] = df_display["confirmado"].apply(
-                lambda x: "✅ Sí" if str(x).lower() in ["true", "1", "yes", "si"] else "⏳ Pendiente"
-            )
-            df_display = df_display.drop(columns=["confirmado"])
+            # Convertir booleano 'confirmado' en texto claro
+            if "confirmado" in df_display.columns:
+                df_display["Confirmado"] = df_display["confirmado"].apply(
+                    lambda x: "✅ Sí" if str(x).lower() in ["true", "1", "yes", "si"] else "⏳ Pendiente"
+                )
+                df_display = df_display.drop(columns=["confirmado"])
 
-        # Ordenar columnas según lo solicitado
-        columnas_deseadas = ["Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "Confirmado"]
-        columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
-        otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col != "id"]
-        
-        df_display = df_display[columnas_existentes + otras_columnas]
+            # Ordenar columnas según lo solicitado
+            columnas_deseadas = ["Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "Confirmado"]
+            columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
+            otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col != "id"]
+            
+            df_display = df_display[columnas_existentes + otras_columnas]
 
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+            st.dataframe(df_display, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay eventos próximos programados (los pasados se mantienen guardados en Airtable).")
     else:
         st.info("No hay eventos registrados en Airtable.")
 
@@ -116,10 +127,7 @@ with tab2:
             hora_fin = st.time_input("Hora de Fin", value=time(19, 30))
 
         evento = st.text_input("Evento")
-        
-        # Selector de archivos para el cartel
         archivo_cartel = st.file_uploader("Subir cartel del evento (Imagen o PDF)", type=["jpg", "jpeg", "png", "pdf"])
-        
         confirmado = st.checkbox("¿Evento confirmado?", value=False)
 
         if st.form_submit_button("Guardar Evento"):
@@ -145,8 +153,6 @@ with tab2:
                     "confirmado": bool(confirmado)
                 }
 
-                # Nota: La subida directa de archivos binarios vía API requiere un enlace público o almacenamiento temporal.
-                # Si se adjunta un archivo, por ahora guardamos una nota informativa en texto hasta enlazar almacenamiento externo si se prefiere.
                 if archivo_cartel is not None:
                     record_evento["cartel_archivo"] = [{"url": "https://via.placeholder.com/150", "filename": archivo_cartel.name}]
 
@@ -172,6 +178,6 @@ with tab4:
     if st.button("Guardar Librería"):
         if nueva_l.strip():
             if guardar_dato("librerias", {"Nombre": nueva_l.strip()}):
-                st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
+                st.success(f"Librería '{nueva_l.strip()}' añadido con éxito.")
                 st.rerun()
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
