@@ -6,13 +6,15 @@ from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
-st.caption("Gestión interna sincronizada con Google Sheets.")
+st.caption("Gestión interna sincronizada permanentemente con Google Sheets.")
 
+# Conexión sin caché para lectura instantánea en tiempo real
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def cargar_tabla(nombre_pestaña):
     try:
-        df = conn.read(worksheet=nombre_pestaña, ttl="0s")
+        # ttl=0 fuerza a leer los datos frescos directamente de Google Sheets
+        df = conn.read(worksheet=nombre_pestaña, ttl=0)
         return df.dropna(how="all")
     except Exception:
         return pd.DataFrame()
@@ -39,13 +41,13 @@ def guardar_fila(nombre_pestaña, fila_datos):
         st.error(f"❌ Error al enviar los datos a Google Apps Script: {e}")
         return False
 
-# Cargar datos
+# Cargar datos en tiempo real de la hoja
 df_eventos = cargar_tabla("eventos")
 df_autores = cargar_tabla("autores")
 df_librerias = cargar_tabla("librerias")
 
-lista_autores = df_autores["Nombre"].dropna().tolist() if not df_autores.empty and "Nombre" in df_autores.columns else []
-lista_librerias = df_librerias["Nombre"].dropna().tolist() if not df_librerias.empty and "Nombre" in df_librerias.columns else []
+lista_autores = df_autores["Nombre"].dropna().astype(str).tolist() if not df_autores.empty and "Nombre" in df_autores.columns else []
+lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df_librerias.empty and "Nombre" in df_librerias.columns else []
 
 tab1, tab2, tab3, tab4 = st.tabs(["📅 Listado de Eventos", "➕ Registrar Nuevo Evento", "👤 Listado de Autores", "🏛️ Listado de Librerías"])
 
@@ -124,7 +126,6 @@ with tab3:
         if nuevo_a.strip():
             if guardar_fila("autores", [nuevo_a.strip()]):
                 st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
-                st.cache_data.clear()
                 st.rerun()
     st.dataframe(df_autores, use_container_width=True, hide_index=True)
 
@@ -136,6 +137,5 @@ with tab4:
         if nueva_l.strip():
             if guardar_fila("librerias", [nueva_l.strip()]):
                 st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
-                st.cache_data.clear()
                 st.rerun()
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
