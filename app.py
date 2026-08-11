@@ -9,8 +9,8 @@ st.caption("Gestión interna sincronizada en tiempo real con Airtable.")
 
 # Inicializar conexión con Airtable
 try:
-    api_key = st.secrets["airtable"]["api_key"]
-    base_id = st.secrets["airtable"]["base_id"]
+    api_key = st.secrets["airtable"]["api_key"].strip()
+    base_id = st.secrets["airtable"]["base_id"].strip()
     api = Api(api_key)
     
     table_eventos = api.table(base_id, "eventos")
@@ -28,7 +28,8 @@ def cargar_datos(tabla):
             return pd.DataFrame()
         data = [r["fields"] for r in records]
         return pd.DataFrame(data)
-    except Exception:
+    except Exception as e:
+        st.error(f"Error al leer la tabla: {e}")
         return pd.DataFrame()
 
 # Cargar datos actuales
@@ -85,29 +86,32 @@ with tab2:
             if not autor_final or not libreria_final:
                 st.error("Por favor completa el autor y la librería.")
             else:
-                if autor_final not in lista_autores:
-                    table_autores.create({"Nombre": autor_final})
+                try:
+                    if autor_final not in lista_autores:
+                        table_autores.create({"Nombre": autor_final})
 
-                if libreria_final not in lista_librerias:
-                    table_librerias.create({"Nombre": libreria_final})
+                    if libreria_final not in lista_librerias:
+                        table_librerias.create({"Nombre": libreria_final})
 
-                nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns and not df_eventos["id"].isnull().all() else 1
-                
-                record_evento = {
-                    "id": str(nuevo_id),
-                    "Autor": autor_final,
-                    "fecha": str(fecha),
-                    "hora_inicio": hora_inicio.strftime("%H:%M"),
-                    "hora_fin": hora_fin.strftime("%H:%M"),
-                    "lugar": libreria_final,
-                    "evento": evento,
-                    "cartel": cartel_archivo if cartel_archivo else "Sin cartel",
-                    "confirmado": bool(confirmado)
-                }
+                    nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns and not df_eventos["id"].isnull().all() else 1
+                    
+                    record_evento = {
+                        "id": str(nuevo_id),
+                        "Autor": autor_final,
+                        "fecha": str(fecha),
+                        "hora_inicio": hora_inicio.strftime("%H:%M"),
+                        "hora_fin": hora_fin.strftime("%H:%M"),
+                        "lugar": libreria_final,
+                        "evento": evento,
+                        "cartel": cartel_archivo if cartel_archivo else "Sin cartel",
+                        "confirmado": bool(confirmado)
+                    }
 
-                table_eventos.create(record_evento)
-                st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
-                st.rerun()
+                    table_eventos.create(record_evento)
+                    st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
+                    st.rerun()
+                except Exception as ex:
+                    st.error(f"❌ Error al guardar en Airtable: {ex}")
 
 # TAB 3: AUTORES
 with tab3:
@@ -115,9 +119,12 @@ with tab3:
     nuevo_a = st.text_input("Añadir autor al catálogo")
     if st.button("Guardar Autor"):
         if nuevo_a.strip():
-            table_autores.create({"Nombre": nuevo_a.strip()})
-            st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
-            st.rerun()
+            try:
+                table_autores.create({"Nombre": nuevo_a.strip()})
+                st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
+                st.rerun()
+            except Exception as ex:
+                st.error(f"❌ Error al guardar el autor: {ex}")
     st.dataframe(df_autores, use_container_width=True, hide_index=True)
 
 # TAB 4: LIBRERÍAS
@@ -126,7 +133,10 @@ with tab4:
     nueva_l = st.text_input("Añadir librería al catálogo")
     if st.button("Guardar Librería"):
         if nueva_l.strip():
-            table_librerias.create({"Nombre": nueva_l.strip()})
-            st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
-            st.rerun()
+            try:
+                table_librerias.create({"Nombre": nueva_l.strip()})
+                st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
+                st.rerun()
+            except Exception as ex:
+                st.error(f"❌ Error al guardar la librería: {ex}")
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
