@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import requests
 from datetime import datetime, time
 from streamlit_gsheets import GSheetsConnection
 
@@ -7,7 +8,7 @@ st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wid
 st.title("📋 Control Interno: Firmas de Autores")
 st.caption("Gestión interna sincronizada permanentemente con Google Sheets.")
 
-# Conexión oficial
+# Conexión
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def cargar_tabla(nombre_pestaña):
@@ -17,7 +18,19 @@ def cargar_tabla(nombre_pestaña):
     except Exception:
         return pd.DataFrame()
 
-# Cargar datos actuales
+def guardar_fila(nombre_pestaña, fila_datos):
+    url = st.secrets["connections"]["gsheets"].get("web_app_url", "")
+    if url:
+        payload = {
+            "sheet": nombre_pestaña,
+            "action": "append",
+            "row": fila_datos
+        }
+        response = requests.post(url, json=payload)
+        return response.status_code == 200
+    return False
+
+# Cargar datos
 df_eventos = cargar_tabla("eventos")
 df_autores = cargar_tabla("autores")
 df_librerias = cargar_tabla("librerias")
@@ -71,35 +84,28 @@ with tab2:
             if not autor_final or not libreria_final:
                 st.error("Por favor completa el autor y la librería.")
             else:
-                # 1. Guardar autor si es nuevo
                 if autor_final not in lista_autores:
-                    df_new_aut = pd.concat([df_autores, pd.DataFrame([{"Nombre": autor_final}])], ignore_index=True)
-                    conn.update(worksheet="autores", data=df_new_aut)
+                    guardar_fila("autores", [autor_final])
 
-                # 2. Guardar librería si es nueva
                 if libreria_final not in lista_librerias:
-                    df_new_lib = pd.concat([df_librerias, pd.DataFrame([{"Nombre": libreria_final}])], ignore_index=True)
-                    conn.update(worksheet="librerias", data=df_new_lib)
+                    guardar_fila("librerias", [libreria_final])
 
-                # 3. Guardar evento
                 nuevo_id = int(df_eventos["id"].max() + 1) if not df_eventos.empty and "id" in df_eventos.columns else 1
-                nuevo_registro = pd.DataFrame([{
-                    "id": nuevo_id,
-                    "Autor": autor_final,
-                    "fecha": str(fecha),
-                    "hora_inicio": hora_inicio.strftime("%H:%M"),
-                    "hora_fin": hora_fin.strftime("%H:%M"),
-                    "lugar": libreria_final,
-                    "evento": evento,
-                    "cartel": cartel_archivo if cartel_archivo else "Sin cartel",
-                    "confirmado": confirmado
-                }])
+                fila_ev = [
+                    nuevo_id,
+                    autor_final,
+                    str(fecha),
+                    hora_inicio.strftime("%H:%M"),
+                    hora_fin.strftime("%H:%M"),
+                    libreria_final,
+                    evento,
+                    cartel_archivo if cartel_archivo else "Sin cartel",
+                    "TRUE" if confirmado else "FALSE"
+                ]
 
-                df_final_eventos = pd.concat([df_eventos, nuevo_registro], ignore_index=True)
-                conn.update(worksheet="eventos", data=df_final_eventos)
-
-                st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
-                st.rerun()
+                if guardar_fila("eventos", fila_ev):
+                    st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
+                    st.rerun()
 
 # TAB 3: AUTORES
 with tab3:
@@ -107,10 +113,9 @@ with tab3:
     nuevo_a = st.text_input("Añadir autor al catálogo")
     if st.button("Guardar Autor"):
         if nuevo_a.strip():
-            df_new_aut = pd.concat([df_autores, pd.DataFrame([{"Nombre": nuevo_a.strip()}])], ignore_index=True)
-            conn.update(worksheet="autores", data=df_new_aut)
-            st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
-            st.rerun()
+            if guardar_fila("autores", [nuevo_a.strip()]):
+                st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
+                st.rerun()
     st.dataframe(df_autores, use_container_width=True, hide_index=True)
 
 # TAB 4: LIBRERÍAS
@@ -119,8 +124,7 @@ with tab4:
     nueva_l = st.text_input("Añadir librería al catálogo")
     if st.button("Guardar Librería"):
         if nueva_l.strip():
-            df_new_lib = pd.concat([df_librerias, pd.DataFrame([{"Nombre": nueva_l.strip()}])], ignore_index=True)
-            conn.update(worksheet="librerias", data=df_new_lib)
-            st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
-            st.rerun()
+            if guardar_fila("librerias", [nueva_l.strip()]):
+                st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
+                st.rerun()
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
