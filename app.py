@@ -1,42 +1,57 @@
 import streamlit as st
 import pandas as pd
+import requests
 from datetime import datetime, time
-import time as time_module  # Importamos el módulo de tiempo para pausar peticiones
-from pyairtable import Api
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
-st.caption("Gestión interna sincronizada en tiempo real con Airtable.")
+st.caption("Gestión interna sincronizada mediante API directa con Airtable.")
 
-# Inicializar conexión con Airtable
+# Configurar conexión directa
 try:
     api_key = st.secrets["airtable"]["api_key"].strip()
     base_id = st.secrets["airtable"]["base_id"].strip()
-    api = Api(api_key)
-    
-    table_eventos = api.table(base_id, "eventos")
-    table_autores = api.table(base_id, "autores")
-    table_librerias = api.table(base_id, "librerias")
+    HEADERS = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
 except Exception as e:
     st.error("⚠️ Configura las claves de Airtable en los Secrets de Streamlit.")
     st.stop()
 
-# Caché de 60 segundos y pausa obligatoria de 0.5s para no saturar Airtable
 @st.cache_data(ttl=60)
 def cargar_datos(nombre_tabla):
+    url = f"https://api.airtable.com/v0/{base_id}/{nombre_tabla}"
     try:
-        time_module.sleep(1.5)  # Semáforo: espera medio segundo antes de pedir datos
-        tabla = api.table(base_id, nombre_tabla)
-        records = tabla.all()
-        if not records:
+        respuesta = requests.get(url, headers=HEADERS)
+        if respuesta.status_code == 200:
+            records = respuesta.json().get("records", [])
+            if not records:
+                return pd.DataFrame()
+            return pd.DataFrame([r["fields"] for r in records])
+        else:
+            st.error(f"Error {respuesta.status_code} al cargar {nombre_tabla}: {respuesta.text}")
             return pd.DataFrame()
-        data = [r["fields"] for r in records]
-        return pd.DataFrame(data)
     except Exception as e:
-        st.error(f"Error al cargar {nombre_tabla}: {e}")
+        st.error(f"Fallo de conexión al cargar {nombre_tabla}: {e}")
         return pd.DataFrame()
 
-# Cargar datos ordenadamente
+def guardar_dato(nombre_tabla, datos):
+    url = f"https://api.airtable.com/v0/{base_id}/{nombre_tabla}"
+    payload = {"records": [{"fields": datos}]}
+    try:
+        respuesta = requests.post(url, headers=HEADERS, json=payload)
+        if respuesta.status_code == 200:
+            st.cache_data.clear()
+            return True
+        else:
+            st.error(f"Error {respuesta.status_code} al guardar en {nombre_tabla}: {respuesta.text}")
+            return False
+    except Exception as e:
+        st.error(f"Fallo de conexión al guardar: {e}")
+        return False
+
+# Cargar datos
 df_eventos = cargar_datos("eventos")
 df_autores = cargar_datos("autores")
 df_librerias = cargar_datos("librerias")
@@ -90,35 +105,29 @@ with tab2:
             if not autor_final or not libreria_final:
                 st.error("Por favor completa el autor y la librería.")
             else:
-                try:
-                    if autor_final not in lista_autores:
-                        table_autores.create({"Nombre": autor_final})
-                        time_module.sleep(0.5)
+                if autor_final not in lista_autores:
+                    guardar_dato("autores", {"Nombre": autor_final})
 
-                    if libreria_final not in lista_librerias:
-                        table_librerias.create({"Nombre": libreria_final})
-                        time_module.sleep(0.5)
+                if libreria_final not in lista_librerias:
+                    guardar_dato("librerias", {"Nombre": libreria_final})
 
-                    nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns and not df_eventos["id"].isnull().all() else 1
-                    
-                    record_evento = {
-                        "id": str(nuevo_id),
-                        "Autor": autor_final,
-                        "fecha": str(fecha),
-                        "hora_inicio": hora_inicio.strftime("%H:%M"),
-                        "hora_fin": hora_fin.strftime("%H:%M"),
-                        "lugar": libreria_final,
-                        "evento": evento,
-                        "cartel": cartel_archivo if cartel_archivo else "Sin cartel",
-                        "confirmado": bool(confirmado)
-                    }
+                nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns and not df_eventos["id"].isnull().all() else 1
+                
+                record_evento = {
+                    "id": str(nuevo_id),
+                    "Autor": autor_final,
+                    "fecha": str(fecha),
+                    "hora_inicio": hora_inicio.strftime("%H:%M"),
+                    "hora_fin": hora_fin.strftime("%H:%M"),
+                    "lugar": libreria_final,
+                    "evento": evento,
+                    "cartel": cartel_archivo if cartel_archivo else "Sin cartel",
+                    "confirmado": bool(confirmado)
+                }
 
-                    table_eventos.create(record_evento)
-                    st.cache_data.clear()
+                if guardar_dato("eventos", record_evento):
                     st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
                     st.rerun()
-                except Exception as ex:
-                    st.error(f"❌ Error al guardar en Airtable: {ex}")
 
 # TAB 3: AUTORES
 with tab3:
@@ -126,13 +135,9 @@ with tab3:
     nuevo_a = st.text_input("Añadir autor al catálogo")
     if st.button("Guardar Autor"):
         if nuevo_a.strip():
-            try:
-                table_autores.create({"Nombre": nuevo_a.strip()})
-                st.cache_data.clear()
+            if guardar_dato("autores", {"Nombre": nuevo_a.strip()}):
                 st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
                 st.rerun()
-            except Exception as ex:
-                st.error(f"❌ Error al guardar el autor: {ex}")
     st.dataframe(df_autores, use_container_width=True, hide_index=True)
 
 # TAB 4: LIBRERÍAS
@@ -141,11 +146,7 @@ with tab4:
     nueva_l = st.text_input("Añadir librería al catálogo")
     if st.button("Guardar Librería"):
         if nueva_l.strip():
-            try:
-                table_librerias.create({"Nombre": nueva_l.strip()})
-                st.cache_data.clear()
+            if guardar_dato("librerias", {"Nombre": nueva_l.strip()}):
                 st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
                 st.rerun()
-            except Exception as ex:
-                st.error(f"❌ Error al guardar la librería: {ex}")
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
