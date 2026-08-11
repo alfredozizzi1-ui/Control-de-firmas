@@ -25,7 +25,7 @@ except Exception as e:
 @st.cache_data(ttl=60)
 def cargar_datos(nombre_tabla):
     try:
-        time_module.sleep(0.5)  # Semáforo: espera medio segundo antes de pedir datos
+        time_module.sleep(1.5)  # Semáforo: espera medio segundo antes de pedir datos
         tabla = api.table(base_id, nombre_tabla)
         records = tabla.all()
         if not records:
