@@ -77,7 +77,6 @@ df_librerias = cargar_datos("librerias")
 lista_autores = df_autores["Nombre"].dropna().astype(str).tolist() if not df_autores.empty and "Nombre" in df_autores.columns else []
 lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df_librerias.empty and "Nombre" in df_librerias.columns else []
 
-# Definición de las pestañas
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📅 Listado de Eventos", 
     "➕ Registrar", 
@@ -126,7 +125,7 @@ with tab1:
     else:
         st.info("No hay eventos registrados en Airtable.")
 
-# TAB 2: NUEVO EVENTO (Con calendario visual)
+# TAB 2: NUEVO EVENTO
 with tab2:
     st.header("Dar de alta un nuevo evento")
     col_sel1, col_sel2 = st.columns(2)
@@ -144,6 +143,7 @@ with tab2:
         col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
             fecha_sel = st.date_input("Fecha", value=date.today())
+            st.caption(f"Fecha seleccionada: **{fecha_sel.strftime('%d-%m-%Y')}**")
         with col_f2:
             hora_inicio = st.time_input("Hora de Inicio", value=time(18, 0))
         with col_f3:
@@ -185,7 +185,7 @@ with tab2:
                     st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
                     st.rerun()
 
-# TAB 3: EDITAR EVENTO EXISTENTE (Con calendario visual)
+# TAB 3: EDITAR EVENTO
 with tab3:
     st.header("Modificar un Evento Existente")
     if not df_eventos.empty:
@@ -206,6 +206,7 @@ with tab3:
                 f_val = date.today()
 
             edit_fecha = st.date_input("Fecha", value=f_val)
+            st.caption(f"Fecha seleccionada: **{edit_fecha.strftime('%d-%m-%Y')}**")
             
             col_h1, col_h2 = st.columns(2)
             try:
