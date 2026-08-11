@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, time
+import time as time_module  # Importamos el módulo de tiempo para pausar peticiones
 from pyairtable import Api
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
@@ -20,10 +21,11 @@ except Exception as e:
     st.error("⚠️ Configura las claves de Airtable en los Secrets de Streamlit.")
     st.stop()
 
-# Función con caché de 10 segundos para evitar saturar la API (Error 429)
-@st.cache_data(ttl=10)
+# Caché de 60 segundos y pausa obligatoria de 0.5s para no saturar Airtable
+@st.cache_data(ttl=60)
 def cargar_datos(nombre_tabla):
     try:
+        time_module.sleep(0.5)  # Semáforo: espera medio segundo antes de pedir datos
         tabla = api.table(base_id, nombre_tabla)
         records = tabla.all()
         if not records:
@@ -34,7 +36,7 @@ def cargar_datos(nombre_tabla):
         st.error(f"Error al cargar {nombre_tabla}: {e}")
         return pd.DataFrame()
 
-# Cargar datos desde caché
+# Cargar datos ordenadamente
 df_eventos = cargar_datos("eventos")
 df_autores = cargar_datos("autores")
 df_librerias = cargar_datos("librerias")
@@ -91,9 +93,11 @@ with tab2:
                 try:
                     if autor_final not in lista_autores:
                         table_autores.create({"Nombre": autor_final})
+                        time_module.sleep(0.5)
 
                     if libreria_final not in lista_librerias:
                         table_librerias.create({"Nombre": libreria_final})
+                        time_module.sleep(0.5)
 
                     nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns and not df_eventos["id"].isnull().all() else 1
                     
@@ -110,7 +114,7 @@ with tab2:
                     }
 
                     table_eventos.create(record_evento)
-                    st.cache_data.clear()  # Limpia la caché al guardar para actualizar de inmediato
+                    st.cache_data.clear()
                     st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
                     st.rerun()
                 except Exception as ex:
@@ -124,7 +128,7 @@ with tab3:
         if nuevo_a.strip():
             try:
                 table_autores.create({"Nombre": nuevo_a.strip()})
-                st.cache_data.clear()  # Limpia la caché para mostrar el nuevo autor al instante
+                st.cache_data.clear()
                 st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
                 st.rerun()
             except Exception as ex:
@@ -139,7 +143,7 @@ with tab4:
         if nueva_l.strip():
             try:
                 table_librerias.create({"Nombre": nueva_l.strip()})
-                st.cache_data.clear()  # Limpia la caché para mostrar la nueva librería al instante
+                st.cache_data.clear()
                 st.success(f"Librería '{nueva_l.strip()}' añadida con éxito.")
                 st.rerun()
             except Exception as ex:
