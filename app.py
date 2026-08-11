@@ -57,9 +57,9 @@ df_librerias = cargar_datos("librerias")
 lista_autores = df_autores["Nombre"].dropna().astype(str).tolist() if not df_autores.empty and "Nombre" in df_autores.columns else []
 lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df_librerias.empty and "Nombre" in df_librerias.columns else []
 
-tab1, tab2, tab3, tab4 = st.tabs(["📅 Listado de Eventos", "➕ Registrar Nuevo Evento", "👤 Listado de Autores", "🏛️ Listado de Librerías"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📅 Listado de Eventos", "➕ Registrar Nuevo Evento", "👤 Listado de Autores", "🏛️ Listado de Librerías", "📝 Bloc General"])
 
-# TAB 1: EVENTOS
+# TAB 1: EVENTOS (Con notas incluidas)
 with tab1:
     st.header("Eventos Próximos Programados")
     if not df_eventos.empty:
@@ -85,7 +85,8 @@ with tab1:
                 )
                 df_display = df_display.drop(columns=["confirmado"])
 
-            columnas_deseadas = ["Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "Confirmado"]
+            # Añadimos 'anotaciones' al orden de las columnas si existe
+            columnas_deseadas = ["Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "anotaciones", "Confirmado"]
             columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
             otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col != "id"]
             
@@ -93,11 +94,11 @@ with tab1:
 
             st.dataframe(df_display, use_container_width=True, hide_index=True)
         else:
-            st.info("No hay eventos próximos programados (los pasados se mantienen guardados en Airtable).")
+            st.info("No hay eventos próximos programados.")
     else:
         st.info("No hay eventos registrados en Airtable.")
 
-# TAB 2: NUEVO EVENTO (Fecha en formato texto europeo DD-MM-YYYY)
+# TAB 2: NUEVO EVENTO (Con campo de anotaciones específico para el evento)
 with tab2:
     st.header("Dar de alta un nuevo evento")
     col_sel1, col_sel2 = st.columns(2)
@@ -121,6 +122,10 @@ with tab2:
             hora_fin = st.time_input("Hora de Fin", value=time(19, 30))
 
         evento = st.text_input("Evento")
+        
+        # Campo de anotaciones exclusivo para este evento
+        anotaciones_evento = st.text_area("Anotaciones para este evento (ej. libros enviados, contacto...)")
+
         archivo_cartel = st.file_uploader("Subir cartel del evento (Imagen o PDF)", type=["jpg", "jpeg", "png", "pdf"])
         confirmado = st.checkbox("¿Evento confirmado?", value=False)
 
@@ -128,7 +133,6 @@ with tab2:
             if not autor_final or not libreria_final:
                 st.error("Por favor completa el autor y la librería.")
             else:
-                # Validar y convertir la fecha escrita a formato ISO para Airtable (YYYY-MM-DD)
                 try:
                     fecha_convertida = datetime.strptime(fecha_texto.strip(), "%d-%m-%Y").strftime("%Y-%m-%d")
                 except ValueError:
@@ -151,6 +155,7 @@ with tab2:
                     "hora_fin": hora_fin.strftime("%H:%M"),
                     "lugar": libreria_final,
                     "evento": evento,
+                    "anotaciones": anotaciones_evento,
                     "confirmado": bool(confirmado)
                 }
 
@@ -182,3 +187,9 @@ with tab4:
                 st.success(f"Librería '{nueva_l.strip()}' añadido con éxito.")
                 st.rerun()
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
+
+# TAB 5: BLOC GENERAL
+with tab5:
+    st.header("Bloc de Anotaciones Generales")
+    st.caption("Espacio libre para notas rápidas generales que no pertenezcan a un evento concreto.")
+    st.text_area("Notas generales:", height=300, placeholder="Apunta aquí recordatorios generales...")
