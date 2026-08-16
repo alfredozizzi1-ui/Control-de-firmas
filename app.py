@@ -254,7 +254,14 @@ lugar_evento = str(fila.get("lugar", ""))
 autor_evento = str(fila.get("Autor", ""))
 
 # Obtener el texto del cartel (busca en la columna 'Cartel' o 'cartel_url')
-campo_cartel = str(fila.get("Cartel", fila.get("cartel_url", "")))
+# Obtenemos el valor bruto de la columna Cartel o cartel_url
+    val_cartel = fila.get("Cartel", fila.get("cartel_url", ""))
+
+    # Si Airtable devuelve una lista de adjuntos, sacamos la URL de ahí
+    if isinstance(val_cartel, list) and len(val_cartel) > 0:
+        campo_cartel = str(val_cartel[0].get("url", ""))
+    else:
+        campo_cartel = str(val_cartel)
 
 # Extraer la URL limpia mediante Expresión Regular (incluso si viene dentro de [Ver cartel](http...))
 match_url = re.search(r'https?://[^\s"\'>\)]+', campo_cartel)
