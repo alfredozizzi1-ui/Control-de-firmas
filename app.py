@@ -22,7 +22,6 @@ def enviar_email(destinatario, asunto, cuerpo):
             server.sendmail(st.secrets["email"]["usuario"], destinatario, msg.as_string())
         return True
     except Exception as e:
-        st.error(f"Error técnico al enviar email: {e}")
         return False
 
 # --- CONFIGURACIÓN AIRTABLE ---
@@ -33,8 +32,8 @@ try:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-except Exception as e:
-    st.error("⚠️ Configura las claves de Airtable en los Secrets de Streamlit.")
+except Exception:
+    st.error("⚠️ Configura las claves de Airtable en los Secrets.")
     st.stop()
 
 @st.cache_data(ttl=60)
@@ -87,242 +86,89 @@ lista_autores = df_autores["Nombre"].dropna().astype(str).tolist() if not df_aut
 lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df_librerias.empty and "Nombre" in df_librerias.columns else []
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📅 Listado de Eventos", 
-    "➕ Registrar", 
-    "✏️ Editar Evento", 
-    "👤 Autores", 
-    "🏛️ Librerías", 
-    "📝 Bloc General"
+    "📅 Listado de Eventos", "➕ Registrar", "✏️ Editar Evento", "👤 Autores", "🏛️ Librerías", "📝 Bloc General"
 ])
 
-# TAB 1: EVENTOS
 with tab1:
     st.header("Eventos Próximos Programados")
     if not df_eventos.empty:
         df_display = df_eventos.copy()
-        
         if "fecha" in df_display.columns:
             df_display["fecha_dt"] = pd.to_datetime(df_display["fecha"], errors='coerce').dt.date
-            df_display = df_display[df_display["fecha_dt"] >= date.today()]
-            df_display = df_display.sort_values(by="fecha_dt", ascending=True)
-            df_display = df_display.drop(columns=["fecha_dt"])
-
-        if not df_display.empty:
-            def formatear_fecha(f):
-                try:
-                    return pd.to_datetime(f).strftime("%d-%m-%Y")
-                except Exception:
-                    return f
-            df_display["fecha"] = df_display["fecha"].apply(formatear_fecha)
-
-            if "confirmado" in df_display.columns:
-                df_display["Confirmado"] = df_display["confirmado"].apply(
-                    lambda x: "✅ Sí" if str(x).lower() in ["true", "1", "yes", "si"] else "⏳ Pendiente"
-                )
-                df_display = df_display.drop(columns=["confirmado"])
-
-            if "cartel_url" not in df_display.columns:
-                df_display["cartel_url"] = ""
-
-            columnas_deseadas = ["id", "Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "anotaciones", "cartel_url", "Confirmado"]
-            columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
-            otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col not in ["airtable_record_id", "cartel_archivo"]]
-            
-            df_display = df_display[columnas_existentes + otras_columnas]
-
-            st.dataframe(
-                df_display, 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "cartel_url": st.column_config.LinkColumn("Cartel", display_text="Ver cartel 🖼️")
-                }
-            )
-        else:
-            st.info("No hay eventos próximos programados.")
+            df_display = df_display[df_display["fecha_dt"] >= date.today()].sort_values(by="fecha_dt").drop(columns=["fecha_dt"])
+        
+        st.dataframe(df_display, use_container_width=True, hide_index=True, column_config={"cartel_url": st.column_config.LinkColumn("Cartel", display_text="Ver cartel 🖼️")})
     else:
-        st.info("No hay eventos registrados en Airtable.")
+        st.info("No hay eventos registrados.")
 
-# TAB 2: NUEVO EVENTO
 with tab2:
     st.header("Dar de alta un nuevo evento")
     col_sel1, col_sel2 = st.columns(2)
     with col_sel1:
-        opciones_autores = sorted(list(set(lista_autores))) + ["➕ Añadir nuevo autor..."]
-        autor_sel = st.selectbox("Seleccionar Autor", opciones_autores, key="nuevo_autor_sel")
-        autor_final = st.text_input("Nombre del nuevo autor", key="nuevo_autor_txt").strip() if autor_sel == "➕ Añadir nuevo autor..." else autor_sel
-
+        autor_sel = st.selectbox("Seleccionar Autor", sorted(list(set(lista_autores))) + ["➕ Añadir nuevo autor..."])
+        autor_final = st.text_input("Nombre del nuevo autor") if autor_sel == "➕ Añadir nuevo autor..." else autor_sel
     with col_sel2:
-        opciones_librerias = sorted(list(set(lista_librerias))) + ["➕ Añadir nueva librería..."]
-        lib_sel = st.selectbox("Seleccionar Lugar / Librería", opciones_librerias, key="nuevo_lib_sel")
-        libreria_final = st.text_input("Nombre de la nueva librería", key="nuevo_lib_txt").strip() if lib_sel == "➕ Añadir nueva librería..." else lib_sel
+        lib_sel = st.selectbox("Seleccionar Librería", sorted(list(set(lista_librerias))) + ["➕ Añadir nueva librería..."])
+        libreria_final = st.text_input("Nombre de la nueva librería") if lib_sel == "➕ Añadir nueva librería..." else lib_sel
 
     with st.form("form_nuevo_evento", clear_on_submit=True):
         col_f1, col_f2, col_f3 = st.columns(3)
-        with col_f1:
-            fecha_sel = st.date_input("Fecha", value=date.today())
-            st.caption(f"Fecha seleccionada: **{fecha_sel.strftime('%d-%m-%Y')}**")
-        with col_f2:
-            hora_inicio = st.time_input("Hora de Inicio", value=time(18, 0))
-        with col_f3:
-            hora_fin = st.time_input("Hora de Fin", value=time(19, 30))
-
+        fecha_sel = col_f1.date_input("Fecha", value=date.today())
+        hora_inicio = col_f2.time_input("Inicio", value=time(18, 0))
+        hora_fin = col_f3.time_input("Fin", value=time(19, 30))
         evento = st.text_input("Evento")
-        anotaciones_evento = st.text_area("Anotaciones para este evento")
-        cartel_enlace = st.text_input("Enlace del Cartel (Google Drive, etc.)", placeholder="https://drive.google.com/...")
-        confirmado = st.checkbox("¿Evento confirmado?", value=False)
+        anotaciones_evento = st.text_area("Anotaciones")
+        cartel_enlace = st.text_input("Enlace del Cartel (Drive)")
+        confirmado = st.checkbox("¿Evento confirmado?")
 
         if st.form_submit_button("Guardar Evento"):
-            if not autor_final or not libreria_final:
-                st.error("Por favor completa el autor y la librería.")
+            if not autor_final or not libreria_final: st.error("Completa Autor y Librería.")
             else:
-                if autor_final not in lista_autores:
-                    guardar_dato("autores", {"Nombre": autor_final})
-
-                if libreria_final not in lista_librerias:
-                    guardar_dato("librerias", {"Nombre": libreria_final})
-
-                nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns and not df_eventos["id"].isnull().all() else 1
-                
-                record_evento = {
-                    "id": str(nuevo_id),
-                    "Autor": autor_final,
-                    "fecha": str(fecha_sel),
-                    "hora_inicio": hora_inicio.strftime("%H:%M"),
-                    "hora_fin": hora_fin.strftime("%H:%M"),
-                    "lugar": libreria_final,
-                    "evento": evento,
-                    "anotaciones": anotaciones_evento,
-                    "cartel_url": cartel_enlace.strip(),
-                    "confirmado": bool(confirmado)
-                }
-
-                if guardar_dato("eventos", record_evento):
-                    st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
+                nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns else 1
+                record = {"id": str(nuevo_id), "Autor": autor_final, "fecha": str(fecha_sel), "hora_inicio": hora_inicio.strftime("%H:%M"), "hora_fin": hora_fin.strftime("%H:%M"), "lugar": libreria_final, "evento": evento, "anotaciones": anotaciones_evento, "cartel_url": cartel_enlace.strip(), "confirmado": bool(confirmado)}
+                if guardar_dato("eventos", record):
+                    st.success("¡Evento guardado!")
                     st.rerun()
 
-# TAB 3: EDITAR EVENTO (Con diagnóstico de emails)
 with tab3:
-    st.header("Modificar un Evento Existente")
+    st.header("Modificar Evento")
     if not df_eventos.empty:
-        df_edit_local = df_eventos.copy()
-        df_edit_local["id_num"] = pd.to_numeric(df_edit_local["id"], errors='coerce').fillna(0)
-        df_edit_local = df_edit_local.sort_values(by="id_num", ascending=True)
-
-        df_edit_local["opcion_combo"] = df_edit_local.apply(lambda r: f"#{int(r.get('id_num', 0))} - {r.get('Autor', 'Sin autor')} ({r.get('fecha', '')} en {r.get('lugar', '')})", axis=1)
+        df_edit = df_eventos.copy()
+        df_edit["id_num"] = pd.to_numeric(df_edit["id"], errors='coerce').fillna(0)
+        df_edit["opcion"] = df_edit.apply(lambda r: f"#{int(r['id_num'])} - {r.get('Autor')} ({r.get('fecha')})", axis=1)
+        evento_sel = st.selectbox("Selecciona evento", df_edit["opcion"].tolist())
+        fila = df_edit[df_edit["opcion"] == evento_sel].iloc[0]
         
-        evento_a_editar = st.selectbox("Selecciona el evento que deseas modificar", df_edit_local["opcion_combo"].tolist())
-        
-        fila_sel = df_edit_local[df_edit_local["opcion_combo"] == evento_a_editar].iloc[0]
-        rec_id = fila_sel["airtable_record_id"]
-
         with st.form("form_editar_evento"):
-            edit_autor = st.text_input("Autor", value=str(fila_sel.get("Autor", "")))
-            edit_lugar = st.text_input("Lugar / Librería", value=str(fila_sel.get("lugar", "")))
+            edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
+            edit_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
+            edit_fecha = st.date_input("Fecha", value=pd.to_datetime(fila.get("fecha")).date())
+            edit_evento_desc = st.text_input("Evento", value=fila.get("evento", ""))
+            edit_cartel_url = st.text_input("Enlace Cartel", value=fila.get("cartel_url", ""))
             
-            f_actual = fila_sel.get("fecha", str(date.today()))
-            try:
-                f_val = pd.to_datetime(f_actual).date()
-            except:
-                f_val = date.today()
-
-            edit_fecha = st.date_input("Fecha", value=f_val)
-            st.caption(f"Fecha seleccionada: **{edit_fecha.strftime('%d-%m-%Y')}**")
-            
-            col_h1, col_h2 = st.columns(2)
-            try:
-                h_ini_val = datetime.strptime(str(fila_sel.get("hora_inicio", "18:00")), "%H:%M").time()
-            except Exception:
-                h_ini_val = time(18, 0)
-            try:
-                h_fin_val = datetime.strptime(str(fila_sel.get("hora_fin", "19:30")), "%H:%M").time()
-            except Exception:
-                h_fin_val = time(19, 30)
-
-            with col_h1:
-                edit_hora_inicio = st.time_input("Hora de Inicio", value=h_ini_val)
-            with col_h2:
-                edit_hora_fin = st.time_input("Hora de Fin", value=h_fin_val)
-
-            edit_evento_desc = st.text_input("Descripción del Evento", value=str(fila_sel.get("evento", "")))
-            edit_anotaciones = st.text_area("Anotaciones", value=str(fila_sel.get("anotaciones", "")))
-            edit_cartel_url = st.text_input("Enlace del Cartel (Google Drive)", value=str(fila_sel.get("cartel_url", "")))
-            
-            conf_val = bool(fila_sel.get("confirmado", False))
-            edit_confirmado = st.checkbox("¿Evento confirmado?", value=conf_val)
-
-            col_btn1, col_btn2 = st.columns(2)
-            submit = col_btn1.form_submit_button("Guardar Cambios")
-            btn_email = col_btn2.form_submit_button("📧 Enviar Notificación")
-
-            if submit:
-                datos_actualizados = {
-                    "Autor": edit_autor,
-                    "lugar": edit_lugar,
-                    "fecha": str(edit_fecha),
-                    "hora_inicio": edit_hora_inicio.strftime("%H:%M"),
-                    "hora_fin": edit_hora_fin.strftime("%H:%M"),
-                    "evento": edit_evento_desc,
-                    "anotaciones": edit_anotaciones,
-                    "cartel_url": edit_cartel_url.strip(),
-                    "confirmado": edit_confirmado
-                }
-
-                if actualizar_dato("eventos", rec_id, datos_actualizados):
-                    st.success("¡Evento modificado y actualizado con éxito en Airtable!")
+            col_b1, col_b2 = st.columns(2)
+            if col_b1.form_submit_button("Guardar Cambios"):
+                datos_actualizados = {"Autor": edit_autor, "lugar": edit_lugar, "fecha": str(edit_fecha), "evento": edit_evento_desc, "cartel_url": edit_cartel_url.strip()}
+                if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizados):
+                    st.success("¡Actualizado!")
                     st.rerun()
-
-            if btn_email:
-                st.write("--- Diagnóstico de Envío ---")
-                st.write(f"Buscando autor: **{edit_autor}**")
-                
+            
+            if col_b2.form_submit_button("📧 Enviar Notificación"):
                 autor_info = df_autores[df_autores["Nombre"].astype(str).str.strip() == edit_autor.strip()]
-                
-                if not autor_info.empty:
-                    if "Email" in autor_info.columns:
-                        destinatario = autor_info.iloc[0]["Email"]
-                        if pd.isna(destinatario) or str(destinatario).strip() == "":
-                            st.error("❌ La celda de Email está vacía para este autor en la tabla de autores.")
-                        else:
-                            st.write(f"Email detectado: **{destinatario}**")
-                            asunto = f"Confirmación de Evento: {edit_evento_desc}"
-                            cuerpo = f"Hola {edit_autor},\n\nTienes un evento programado:\n- Evento: {edit_evento_desc}\n- Fecha: {edit_fecha.strftime('%d-%m-%Y')}\n- Hora: {edit_hora_inicio.strftime('%H:%M')} a {edit_hora_fin.strftime('%H:%M')}\n- Lugar: {edit_lugar}\n\nEnlace al Cartel: {edit_cartel_url}\n\nUn saludo."
-                            
-                            if enviar_email(destinatario, asunto, cuerpo):
-                                st.success(f"✅ ¡Correo enviado con éxito a {destinatario}!")
-                            else:
-                                st.error("❌ Fallo al conectar con el servidor de correo. Revisa tus Secrets [email].")
-                    else:
-                        st.error("❌ La columna 'Email' no existe en la tabla 'autores' de Airtable.")
-                else:
-                    st.error(f"❌ No se encontró al autor '{edit_autor}' en la tabla de autores. Revisa la coincidencia exacta.")
-    else:
-        st.info("No hay eventos registrados para editar.")
+                if not autor_info.empty and "Email" in autor_info.columns:
+                    destinatario = autor_info.iloc[0]["Email"]
+                    if not pd.isna(destinatario):
+                        if enviar_email(destinatario, f"Evento: {edit_evento_desc}", f"Hola {edit_autor},\n\nEvento: {edit_evento_desc}\nFecha: {edit_fecha}\nCartel: {edit_cartel_url}"):
+                            st.success(f"Correo enviado a {destinatario}")
+                        else: st.error("Error al enviar.")
+                    else: st.error("El email está vacío en autores.")
+                else: st.error("Autor no encontrado o sin email.")
 
-# TAB 4: AUTORES
 with tab4:
-    st.header("Listado de Autores Registrados")
-    nuevo_a = st.text_input("Añadir autor al catálogo", key="input_autor_cat")
-    if st.button("Guardar Autor", key="btn_guardar_autor"):
-        if nuevo_a.strip():
-            if guardar_dato("autores", {"Nombre": nuevo_a.strip()}):
-                st.success(f"Autor '{nuevo_a.strip()}' añadido con éxito.")
-                st.rerun()
-    st.dataframe(df_autores, use_container_width=True, hide_index=True)
+    st.header("Autores"); st.dataframe(df_autores, use_container_width=True)
 
-# TAB 5: LIBRERÍAS
 with tab5:
-    st.header("Listado de Librerías Registradas")
-    nueva_l = st.text_input("Añadir librería al catálogo", key="input_lib_cat")
-    if st.button("Guardar Librería", key="btn_guardar_lib"):
-        if nueva_l.strip():
-            if guardar_dato("librerias", {"Nombre": nueva_l.strip()}):
-                st.success(f"Librería '{nueva_l.strip()}' añadido con éxito.")
-                st.rerun()
-    st.dataframe(df_librerias, use_container_width=True, hide_index=True)
+    st.header("Librerías"); st.dataframe(df_librerias, use_container_width=True)
 
-# TAB 6: BLOC GENERAL
 with tab6:
-    st.header("Bloc de Anotaciones Generales")
-    st.caption("Espacio libre para notas rápidas generales.")
-    st.text_area("Notas generales:", height=300, placeholder="Apunta aquí recordatorios generales...", key="bloc_general")
+    st.header("Bloc General"); st.text_area("Notas", height=300)
