@@ -145,26 +145,43 @@ with tab3:
             edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
             edit_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
             edit_fecha = st.date_input("Fecha", value=pd.to_datetime(fila.get("fecha")).date())
+            
+            col_h1, col_h2 = st.columns(2)
             try: h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
             except: h_ini_val = time(18, 0)
+            try: h_fin_val = datetime.strptime(str(fila.get("hora_fin", "19:30")), "%H:%M").time()
+            except: h_fin_val = time(19, 30)
+
+            with col_h1:
+                edit_hora_inicio = st.time_input("Hora de Inicio", value=h_ini_val)
+            with col_h2:
+                edit_hora_fin = st.time_input("Hora de Fin", value=h_fin_val)
             
             edit_evento_desc = st.text_input("Evento", value=fila.get("evento", ""))
             edit_cartel_url = st.text_input("Enlace Cartel", value=fila.get("cartel_url", ""))
             
             if st.form_submit_button("Guardar Cambios"):
-                if actualizar_dato("eventos", fila["airtable_record_id"], {"Autor": edit_autor, "lugar": edit_lugar, "fecha": str(edit_fecha), "evento": edit_evento_desc, "cartel_url": edit_cartel_url.strip()}):
+                datos_actualizacion = {
+                    "Autor": edit_autor, 
+                    "lugar": edit_lugar, 
+                    "fecha": str(edit_fecha), 
+                    "hora_inicio": edit_hora_inicio.strftime("%H:%M"),
+                    "hora_fin": edit_hora_fin.strftime("%H:%M"),
+                    "evento": edit_evento_desc, 
+                    "cartel_url": edit_cartel_url.strip()
+                }
+                if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                     st.success("¡Actualizado!"); st.rerun()
             
             if st.form_submit_button("📧 Enviar Notificación a Autor y Librería"):
                 autor_info = df_autores[df_autores["Nombre"].astype(str).str.strip() == edit_autor.strip()]
                 lib_info = df_librerias[df_librerias["Nombre"].astype(str).str.strip() == edit_lugar.strip()]
                 
-                # Lógica del cartel
                 cartel_texto = str(edit_cartel_url).strip()
                 info_cartel = f"Puedes consultar el cartel del evento aquí:\n{cartel_texto}" if (cartel_texto and cartel_texto.lower() != "nan") else "En este momento estamos finalizando el diseño del cartel. Te lo haremos llegar en un próximo correo en cuanto esté disponible."
                 
                 asunto = f"Confirmación de Evento: {edit_evento_desc} - {edit_lugar}"
-                cuerpo = f"Estimado/a,\n\nDesde Atlántida Distribuciones, confirmamos los detalles del evento:\n\nEVENTO: {edit_evento_desc}\nFECHA: {edit_fecha.strftime('%d de %B de %Y')}\nHORARIO: {h_ini_val.strftime('%H:%M')}\nLUGAR: {edit_lugar}\n\n{info_cartel}\n\nUn saludo.\n\nAtlántida Distribuciones"
+                cuerpo = f"Estimado/a,\n\nDesde Atlántida Distribuciones, confirmamos los detalles del evento:\n\nEVENTO: {edit_evento_desc}\nFECHA: {edit_fecha.strftime('%d de %B de %Y')}\nHORARIO: {edit_hora_inicio.strftime('%H:%M')} - {edit_hora_fin.strftime('%H:%M')}\nLUGAR: {edit_lugar}\n\n{info_cartel}\n\nUn saludo.\n\nAtlántida Distribuciones"
                 
                 errores = []
                 for label, info in [("Autor", autor_info), ("Librería", lib_info)]:
