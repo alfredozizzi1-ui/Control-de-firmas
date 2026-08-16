@@ -263,9 +263,9 @@ autor_evento = str(fila.get("Autor", ""))
     else:
         campo_cartel = str(val_cartel)
 
-# Extraer la URL limpia mediante Expresión Regular (incluso si viene dentro de [Ver cartel](http...))
-match_url = re.search(r'https?://[^\s"\'>\)]+', campo_cartel)
-url_imagen_db = match_url.group(0) if match_url else ""
+    # Extraemos la URL limpia mediante Expresión Regular
+    match_url = re.search(r'https?://[^\s"\'>\)]+', campo_cartel)
+    url_imagen_db = match_url.group(0) if match_url else ""
 
 # Si es un enlace de Google Drive, convertirlo automáticamente a descarga directa
 if "drive.google.com" in url_imagen_db and "/file/d/" in url_imagen_db:
