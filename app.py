@@ -86,7 +86,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📝 Bloc General"
 ])
 
-# TAB 1: EVENTOS
+# TAB 1: EVENTOS (Mostrando la ID en las columnas)
 with tab1:
     st.header("Eventos Próximos Programados")
     if not df_eventos.empty:
@@ -113,9 +113,10 @@ with tab1:
                 )
                 df_display = df_display.drop(columns=["confirmado"])
 
-            columnas_deseadas = ["Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "anotaciones", "Confirmado"]
+            # Añadimos "id" al principio de las columnas deseadas
+            columnas_deseadas = ["id", "Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "anotaciones", "Confirmado"]
             columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
-            otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col not in ["id", "airtable_record_id", "cartel_archivo"]]
+            otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col not in ["airtable_record_id", "cartel_archivo"]]
             
             df_display = df_display[columnas_existentes + otras_columnas]
 
@@ -185,14 +186,21 @@ with tab2:
                     st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
                     st.rerun()
 
-# TAB 3: EDITAR EVENTO (Con opción de subir cartel)
+# TAB 3: EDITAR EVENTO (Ordenado estrictamente por ID)
 with tab3:
     st.header("Modificar un Evento Existente")
     if not df_eventos.empty:
-        df_eventos["opcion_combo"] = df_eventos.apply(lambda r: f"#{r.get('id', '?')} - {r.get('Autor', 'Sin autor')} ({r.get('fecha', '')} en {r.get('lugar', '')})", axis=1)
-        evento_a_editar = st.selectbox("Selecciona el evento que deseas modificar", df_eventos["opcion_combo"].tolist())
+        df_edit_local = df_eventos.copy()
         
-        fila_sel = df_eventos[df_eventos["opcion_combo"] == evento_a_editar].iloc[0]
+        # Convertir id a numérico para ordenar correctamente de menor a mayor
+        df_edit_local["id_num"] = pd.to_numeric(df_edit_local["id"], errors='coerce').fillna(0)
+        df_edit_local = df_edit_local.sort_values(by="id_num", ascending=True)
+
+        df_edit_local["opcion_combo"] = df_edit_local.apply(lambda r: f"#{int(r.get('id_num', 0))} - {r.get('Autor', 'Sin autor')} ({r.get('fecha', '')} en {r.get('lugar', '')})", axis=1)
+        
+        evento_a_editar = st.selectbox("Selecciona el evento que deseas modificar", df_edit_local["opcion_combo"].tolist())
+        
+        fila_sel = df_edit_local[df_edit_local["opcion_combo"] == evento_a_editar].iloc[0]
         rec_id = fila_sel["airtable_record_id"]
 
         with st.form("form_editar_evento"):
