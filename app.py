@@ -98,12 +98,16 @@ with tab1:
         df_display = df_display.replace(['nan', 'None'], '', regex=True)
         
         if "fecha" in df_display.columns:
-            df_display["fecha_dt"] = pd.to_datetime(df_display["fecha"], errors='coerce').dt.date
-            df_display = df_display[df_display["fecha_dt"] >= date.today()].sort_values(by="fecha_dt")
+            # Convertimos a datetime para filtrar y ordenar correctamente
+            df_display["fecha_dt"] = pd.to_datetime(df_display["fecha"], errors='coerce')
+            df_display = df_display[df_display["fecha_dt"].dt.date >= date.today()].sort_values(by="fecha_dt")
+            
+            # Formateamos la fecha explícitamente a dd-mm-aaaa para que se vea europea
+            df_display["fecha"] = df_display["fecha_dt"].dt.strftime("%d-%m-%Y")
+            df_display = df_display.drop(columns=["fecha_dt"])
         
         # Selección y orden de columnas
         columnas_ordenadas = ["id", "Autor", "fecha", "hora_inicio", "hora_fin", "lugar", "evento", "confirmado", "anotaciones", "cartel_url"]
-        # Filtrar solo las que existan en el df por si acaso
         df_display = df_display[[c for c in columnas_ordenadas if c in df_display.columns]]
         
         st.dataframe(
