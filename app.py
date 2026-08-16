@@ -21,7 +21,7 @@ def enviar_email(destinatario, asunto, cuerpo):
             server.login(st.secrets["email"]["usuario"], st.secrets["email"]["password"])
             server.sendmail(st.secrets["email"]["usuario"], destinatario, msg.as_string())
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 # --- CONFIGURACIÓN AIRTABLE ---
@@ -171,12 +171,11 @@ with tab3:
                         asunto = f"Confirmación de Evento: {edit_evento_desc} - {edit_lugar}"
                         cuerpo = f"""Estimado/a {edit_autor},
 
-Esperamos que este mensaje te encuentre bien.
-
 Desde Atlántida Distribuciones, nos complace confirmarte los detalles del próximo evento programado:
 
 EVENTO: {edit_evento_desc}
 FECHA: {edit_fecha.strftime('%d de %B de %Y')}
+HORARIO: {h_ini_val.strftime('%H:%M')}
 LUGAR: {edit_lugar}
 
 {info_cartel}
