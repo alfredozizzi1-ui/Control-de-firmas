@@ -32,13 +32,6 @@ def cargar_datos(nombre_tabla):
             for r in records:
                 fields = r["fields"]
                 fields["airtable_record_id"] = r["id"]
-                
-                # Extraer la URL del cartel si existe en el campo de archivos de Airtable
-                if "cartel_archivo" in fields and isinstance(fields["cartel_archivo"], list) and len(fields["cartel_archivo"]) > 0:
-                    fields["Cartel"] = fields["cartel_archivo"][0].get("url", "")
-                else:
-                    fields["Cartel"] = ""
-                    
                 data.append(fields)
             return pd.DataFrame(data)
         else:
@@ -93,7 +86,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📝 Bloc General"
 ])
 
-# TAB 1: EVENTOS (Incluyendo columna de cartel)
+# TAB 1: EVENTOS (Con enlace directo al cartel de Drive)
 with tab1:
     st.header("Eventos Próximos Programados")
     if not df_eventos.empty:
@@ -120,20 +113,22 @@ with tab1:
                 )
                 df_display = df_display.drop(columns=["confirmado"])
 
-            # Añadimos "Cartel" al listado de columnas deseadas
-            columnas_deseadas = ["id", "Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "anotaciones", "Cartel", "Confirmado"]
+            # Asegurar que existe la columna cartel_url para mostrarla
+            if "cartel_url" not in df_display.columns:
+                df_display["cartel_url"] = ""
+
+            columnas_deseadas = ["id", "Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "anotaciones", "cartel_url", "Confirmado"]
             columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
             otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col not in ["airtable_record_id", "cartel_archivo"]]
             
             df_display = df_display[columnas_existentes + otras_columnas]
 
-            # Mostrar la tabla con enlaces interactivos en la columna Cartel si es compatible
             st.dataframe(
                 df_display, 
                 use_container_width=True, 
                 hide_index=True,
                 column_config={
-                    "Cartel": st.column_config.LinkColumn("Cartel", display_text="Ver archivo 🖼️")
+                    "cartel_url": st.column_config.LinkColumn("Cartel", display_text="Ver cartel 🖼️")
                 }
             )
         else:
@@ -141,7 +136,7 @@ with tab1:
     else:
         st.info("No hay eventos registrados en Airtable.")
 
-# TAB 2: NUEVO EVENTO
+# TAB 2: NUEVO EVENTO (Con campo de enlace de Drive)
 with tab2:
     st.header("Dar de alta un nuevo evento")
     col_sel1, col_sel2 = st.columns(2)
@@ -167,7 +162,10 @@ with tab2:
 
         evento = st.text_input("Evento")
         anotaciones_evento = st.text_area("Anotaciones para este evento")
-        archivo_cartel = st.file_uploader("Subir cartel del evento (Imagen o PDF)", type=["jpg", "jpeg", "png", "pdf"])
+        
+        # Campo para pegar el enlace de Google Drive
+        cartel_enlace = st.text_input("Enlace del Cartel (Google Drive, etc.)", placeholder="https://drive.google.com/...")
+        
         confirmado = st.checkbox("¿Evento confirmado?", value=False)
 
         if st.form_submit_button("Guardar Evento"):
@@ -191,18 +189,15 @@ with tab2:
                     "lugar": libreria_final,
                     "evento": evento,
                     "anotaciones": anotaciones_evento,
+                    "cartel_url": cartel_enlace.strip(),
                     "confirmado": bool(confirmado)
                 }
-
-                if archivo_cartel is not None:
-                    # En Streamlit Cloud los archivos subidos requieren un tratamiento especial para Airtable o enlace temporal
-                    record_evento["cartel_archivo"] = [{"url": "https://via.placeholder.com/150", "filename": archivo_cartel.name}]
 
                 if guardar_dato("eventos", record_evento):
                     st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
                     st.rerun()
 
-# TAB 3: EDITAR EVENTO
+# TAB 3: EDITAR EVENTO (Con campo de enlace de Drive)
 with tab3:
     st.header("Modificar un Evento Existente")
     if not df_eventos.empty:
@@ -248,7 +243,7 @@ with tab3:
             edit_evento_desc = st.text_input("Descripción del Evento", value=str(fila_sel.get("evento", "")))
             edit_anotaciones = st.text_area("Anotaciones", value=str(fila_sel.get("anotaciones", "")))
             
-            edit_archivo_cartel = st.file_uploader("Actualizar cartel del evento (Imagen o PDF)", type=["jpg", "jpeg", "png", "pdf"])
+            edit_cartel_url = st.text_input("Enlace del Cartel (Google Drive, etc.)", value=str(fila_sel.get("cartel_url", "")))
             
             conf_val = bool(fila_sel.get("confirmado", False))
             edit_confirmado = st.checkbox("¿Evento confirmado?", value=conf_val)
@@ -262,11 +257,9 @@ with tab3:
                     "hora_fin": edit_hora_fin.strftime("%H:%M"),
                     "evento": edit_evento_desc,
                     "anotaciones": edit_anotaciones,
+                    "cartel_url": edit_cartel_url.strip(),
                     "confirmado": edit_confirmado
                 }
-
-                if edit_archivo_cartel is not None:
-                    datos_actualizados["cartel_archivo"] = [{"url": "https://via.placeholder.com/150", "filename": edit_archivo_cartel.name}]
 
                 if actualizar_dato("eventos", rec_id, datos_actualizados):
                     st.success("¡Evento modificado y actualizado con éxito en Airtable!")
