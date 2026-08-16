@@ -93,11 +93,28 @@ with tab1:
     st.header("Eventos Próximos Programados")
     if not df_eventos.empty:
         df_display = df_eventos.copy()
+        
+        # Limpieza de textos "nan" o "None" para la vista
+        df_display = df_display.replace(['nan', 'None'], '', regex=True)
+        
         if "fecha" in df_display.columns:
             df_display["fecha_dt"] = pd.to_datetime(df_display["fecha"], errors='coerce').dt.date
-            df_display = df_display[df_display["fecha_dt"] >= date.today()].sort_values(by="fecha_dt").drop(columns=["fecha_dt"])
+            df_display = df_display[df_display["fecha_dt"] >= date.today()].sort_values(by="fecha_dt")
         
-        st.dataframe(df_display, use_container_width=True, hide_index=True, column_config={"cartel_url": st.column_config.LinkColumn("Cartel", display_text="Ver cartel 🖼️")})
+        # Selección y orden de columnas
+        columnas_ordenadas = ["id", "Autor", "fecha", "hora_inicio", "hora_fin", "lugar", "evento", "confirmado", "anotaciones", "cartel_url"]
+        # Filtrar solo las que existan en el df por si acaso
+        df_display = df_display[[c for c in columnas_ordenadas if c in df_display.columns]]
+        
+        st.dataframe(
+            df_display, 
+            use_container_width=True, 
+            hide_index=True, 
+            column_config={
+                "cartel_url": st.column_config.LinkColumn("Cartel", display_text="Ver cartel 🖼️"),
+                "confirmado": st.column_config.CheckboxColumn("Confirmado")
+            }
+        )
     else:
         st.info("No hay eventos registrados.")
 
@@ -163,8 +180,6 @@ with tab3:
                 if not autor_info.empty and "Email" in autor_info.columns:
                     destinatario = autor_info.iloc[0]["Email"]
                     if not pd.isna(destinatario) and str(destinatario).strip() != "":
-                        
-                        # Comprobación estricta para evitar que detecte "nan" o vacíos
                         cartel_texto = str(edit_cartel_url).strip()
                         if cartel_texto and cartel_texto.lower() != "nan":
                             info_cartel = f"Puedes consultar el cartel del evento aquí:\n{cartel_texto}"
