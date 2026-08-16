@@ -32,6 +32,13 @@ def cargar_datos(nombre_tabla):
             for r in records:
                 fields = r["fields"]
                 fields["airtable_record_id"] = r["id"]
+                
+                # Extraer la URL del cartel si existe en el campo de archivos de Airtable
+                if "cartel_archivo" in fields and isinstance(fields["cartel_archivo"], list) and len(fields["cartel_archivo"]) > 0:
+                    fields["Cartel"] = fields["cartel_archivo"][0].get("url", "")
+                else:
+                    fields["Cartel"] = ""
+                    
                 data.append(fields)
             return pd.DataFrame(data)
         else:
@@ -86,7 +93,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📝 Bloc General"
 ])
 
-# TAB 1: EVENTOS (Mostrando la ID en las columnas)
+# TAB 1: EVENTOS (Incluyendo columna de cartel)
 with tab1:
     st.header("Eventos Próximos Programados")
     if not df_eventos.empty:
@@ -113,14 +120,22 @@ with tab1:
                 )
                 df_display = df_display.drop(columns=["confirmado"])
 
-            # Añadimos "id" al principio de las columnas deseadas
-            columnas_deseadas = ["id", "Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "anotaciones", "Confirmado"]
+            # Añadimos "Cartel" al listado de columnas deseadas
+            columnas_deseadas = ["id", "Autor", "fecha", "lugar", "hora_inicio", "hora_fin", "evento", "anotaciones", "Cartel", "Confirmado"]
             columnas_existentes = [col for col in columnas_deseadas if col in df_display.columns]
             otras_columnas = [col for col in df_display.columns if col not in columnas_existentes and col not in ["airtable_record_id", "cartel_archivo"]]
             
             df_display = df_display[columnas_existentes + otras_columnas]
 
-            st.dataframe(df_display, use_container_width=True, hide_index=True)
+            # Mostrar la tabla con enlaces interactivos en la columna Cartel si es compatible
+            st.dataframe(
+                df_display, 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Cartel": st.column_config.LinkColumn("Cartel", display_text="Ver archivo 🖼️")
+                }
+            )
         else:
             st.info("No hay eventos próximos programados.")
     else:
@@ -180,19 +195,18 @@ with tab2:
                 }
 
                 if archivo_cartel is not None:
+                    # En Streamlit Cloud los archivos subidos requieren un tratamiento especial para Airtable o enlace temporal
                     record_evento["cartel_archivo"] = [{"url": "https://via.placeholder.com/150", "filename": archivo_cartel.name}]
 
                 if guardar_dato("eventos", record_evento):
                     st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
                     st.rerun()
 
-# TAB 3: EDITAR EVENTO (Ordenado estrictamente por ID)
+# TAB 3: EDITAR EVENTO
 with tab3:
     st.header("Modificar un Evento Existente")
     if not df_eventos.empty:
         df_edit_local = df_eventos.copy()
-        
-        # Convertir id a numérico para ordenar correctamente de menor a mayor
         df_edit_local["id_num"] = pd.to_numeric(df_edit_local["id"], errors='coerce').fillna(0)
         df_edit_local = df_edit_local.sort_values(by="id_num", ascending=True)
 
