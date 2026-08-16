@@ -125,7 +125,7 @@ with tab1:
     else:
         st.info("No hay eventos registrados en Airtable.")
 
-# TAB 2: NUEVO EVENTO (clear_on_submit=True activa la limpieza automática)
+# TAB 2: NUEVO EVENTO
 with tab2:
     st.header("Dar de alta un nuevo evento")
     col_sel1, col_sel2 = st.columns(2)
@@ -185,7 +185,7 @@ with tab2:
                     st.success(f"¡Evento #{nuevo_id} guardado con éxito!")
                     st.rerun()
 
-# TAB 3: EDITAR EVENTO
+# TAB 3: EDITAR EVENTO (Con opción de subir cartel)
 with tab3:
     st.header("Modificar un Evento Existente")
     if not df_eventos.empty:
@@ -226,6 +226,8 @@ with tab3:
             edit_evento_desc = st.text_input("Descripción del Evento", value=str(fila_sel.get("evento", "")))
             edit_anotaciones = st.text_area("Anotaciones", value=str(fila_sel.get("anotaciones", "")))
             
+            edit_archivo_cartel = st.file_uploader("Actualizar cartel del evento (Imagen o PDF)", type=["jpg", "jpeg", "png", "pdf"])
+            
             conf_val = bool(fila_sel.get("confirmado", False))
             edit_confirmado = st.checkbox("¿Evento confirmado?", value=conf_val)
 
@@ -240,6 +242,9 @@ with tab3:
                     "anotaciones": edit_anotaciones,
                     "confirmado": edit_confirmado
                 }
+
+                if edit_archivo_cartel is not None:
+                    datos_actualizados["cartel_archivo"] = [{"url": "https://via.placeholder.com/150", "filename": edit_archivo_cartel.name}]
 
                 if actualizar_dato("eventos", rec_id, datos_actualizados):
                     st.success("¡Evento modificado y actualizado con éxito en Airtable!")
