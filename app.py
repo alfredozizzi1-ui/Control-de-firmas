@@ -93,34 +93,16 @@ with tab1:
     st.header("Eventos Próximos Programados")
     if not df_eventos.empty:
         df_display = df_eventos.copy()
-        
-        # Limpieza de textos "nan" o "None" para la vista
         df_display = df_display.replace(['nan', 'None'], '', regex=True)
-        
         if "fecha" in df_display.columns:
-            # Convertimos a datetime para filtrar y ordenar correctamente
             df_display["fecha_dt"] = pd.to_datetime(df_display["fecha"], errors='coerce')
             df_display = df_display[df_display["fecha_dt"].dt.date >= date.today()].sort_values(by="fecha_dt")
-            
-            # Formateamos la fecha explícitamente a dd-mm-aaaa para que se vea europea
             df_display["fecha"] = df_display["fecha_dt"].dt.strftime("%d-%m-%Y")
             df_display = df_display.drop(columns=["fecha_dt"])
         
-        # Selección y orden de columnas
         columnas_ordenadas = ["id", "Autor", "fecha", "hora_inicio", "hora_fin", "lugar", "evento", "confirmado", "anotaciones", "cartel_url"]
         df_display = df_display[[c for c in columnas_ordenadas if c in df_display.columns]]
-        
-        st.dataframe(
-            df_display, 
-            use_container_width=True, 
-            hide_index=True, 
-            column_config={
-                "cartel_url": st.column_config.LinkColumn("Cartel", display_text="Ver cartel 🖼️"),
-                "confirmado": st.column_config.CheckboxColumn("Confirmado")
-            }
-        )
-    else:
-        st.info("No hay eventos registrados.")
+        st.dataframe(df_display, use_container_width=True, hide_index=True, column_config={"cartel_url": st.column_config.LinkColumn("Cartel", display_text="Ver cartel 🖼️"), "confirmado": st.column_config.CheckboxColumn("Confirmado")})
 
 with tab2:
     st.header("Dar de alta un nuevo evento")
@@ -148,8 +130,7 @@ with tab2:
                 nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns else 1
                 record = {"id": str(nuevo_id), "Autor": autor_final, "fecha": str(fecha_sel), "hora_inicio": hora_inicio.strftime("%H:%M"), "hora_fin": hora_fin.strftime("%H:%M"), "lugar": libreria_final, "evento": evento, "anotaciones": anotaciones_evento, "cartel_url": cartel_enlace.strip(), "confirmado": bool(confirmado)}
                 if guardar_dato("eventos", record):
-                    st.success("¡Evento guardado!")
-                    st.rerun()
+                    st.success("¡Evento guardado!"); st.rerun()
 
 with tab3:
     st.header("Modificar Evento")
@@ -164,68 +145,39 @@ with tab3:
             edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
             edit_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
             edit_fecha = st.date_input("Fecha", value=pd.to_datetime(fila.get("fecha")).date())
-            try:
-                h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
-            except:
-                h_ini_val = time(18, 0)
+            try: h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
+            except: h_ini_val = time(18, 0)
             
             edit_evento_desc = st.text_input("Evento", value=fila.get("evento", ""))
             edit_cartel_url = st.text_input("Enlace Cartel", value=fila.get("cartel_url", ""))
             
-            col_b1, col_b2 = st.columns(2)
-            if col_b1.form_submit_button("Guardar Cambios"):
-                datos_actualizados = {"Autor": edit_autor, "lugar": edit_lugar, "fecha": str(edit_fecha), "evento": edit_evento_desc, "cartel_url": edit_cartel_url.strip()}
-                if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizados):
-                    st.success("¡Actualizado!")
-                    st.rerun()
+            if st.form_submit_button("Guardar Cambios"):
+                if actualizar_dato("eventos", fila["airtable_record_id"], {"Autor": edit_autor, "lugar": edit_lugar, "fecha": str(edit_fecha), "evento": edit_evento_desc, "cartel_url": edit_cartel_url.strip()}):
+                    st.success("¡Actualizado!"); st.rerun()
             
-            if col_b2.form_submit_button("📧 Enviar Notificación"):
+            if st.form_submit_button("📧 Enviar Notificación a Autor y Librería"):
                 autor_info = df_autores[df_autores["Nombre"].astype(str).str.strip() == edit_autor.strip()]
-                if not autor_info.empty and "Email" in autor_info.columns:
-                    destinatario = autor_info.iloc[0]["Email"]
-                    if not pd.isna(destinatario) and str(destinatario).strip() != "":
-                        cartel_texto = str(edit_cartel_url).strip()
-                        if cartel_texto and cartel_texto.lower() != "nan":
-                            info_cartel = f"Puedes consultar el cartel del evento aquí:\n{cartel_texto}"
-                        else:
-                            info_cartel = "En este momento estamos finalizando el diseño del cartel. Te lo haremos llegar en un próximo correo en cuanto esté disponible."
-                        
-                        asunto = f"Confirmación de Evento: {edit_evento_desc} - {edit_lugar}"
-                        cuerpo = f"""Estimado/a {edit_autor},
-
-Desde Atlántida Distribuciones, nos complace confirmarte los detalles del próximo evento programado:
-
-EVENTO: {edit_evento_desc}
-FECHA: {edit_fecha.strftime('%d de %B de %Y')}
-HORARIO: {h_ini_val.strftime('%H:%M')}
-LUGAR: {edit_lugar}
-
-{info_cartel}
-
-Quedamos a tu entera disposición para cualquier consulta adicional que puedas necesitar.
-
-Atentamente,
-
-Equipo de Atlántida Distribuciones
-www.atlantidadistribuciones.es
-"""
-                        if enviar_email(destinatario, asunto, cuerpo):
-                            st.success(f"✅ Notificación enviada con éxito a {destinatario}")
-                        else:
-                            st.error("❌ Fallo en el envío del servidor SMTP.")
-                    else:
-                        st.error("❌ El campo de Email está vacío en la ficha del autor.")
-                else:
-                    st.error("❌ Autor no encontrado o sin email registrado.")
+                lib_info = df_librerias[df_librerias["Nombre"].astype(str).str.strip() == edit_lugar.strip()]
+                
+                # Lógica del cartel
+                cartel_texto = str(edit_cartel_url).strip()
+                info_cartel = f"Puedes consultar el cartel del evento aquí:\n{cartel_texto}" if (cartel_texto and cartel_texto.lower() != "nan") else "En este momento estamos finalizando el diseño del cartel. Te lo haremos llegar en un próximo correo en cuanto esté disponible."
+                
+                asunto = f"Confirmación de Evento: {edit_evento_desc} - {edit_lugar}"
+                cuerpo = f"Estimado/a,\n\nDesde Atlántida Distribuciones, confirmamos los detalles del evento:\n\nEVENTO: {edit_evento_desc}\nFECHA: {edit_fecha.strftime('%d de %B de %Y')}\nHORARIO: {h_ini_val.strftime('%H:%M')}\nLUGAR: {edit_lugar}\n\n{info_cartel}\n\nUn saludo.\n\nAtlántida Distribuciones"
+                
+                errores = []
+                for label, info in [("Autor", autor_info), ("Librería", lib_info)]:
+                    if not info.empty and "Email" in info.columns and not pd.isna(info.iloc[0]["Email"]):
+                        if not enviar_email(info.iloc[0]["Email"], asunto, cuerpo): errores.append(f"{label} (Error SMTP)")
+                    else: errores.append(f"{label} (Sin email o no encontrado)")
+                
+                if not errores: st.success("✅ Notificaciones enviadas correctamente.")
+                else: st.error(f"❌ Fallo al enviar a: {', '.join(errores)}")
 
 with tab4:
-    st.header("Autores")
-    st.dataframe(df_autores, use_container_width=True)
-
+    st.header("Autores"); st.dataframe(df_autores, use_container_width=True)
 with tab5:
-    st.header("Librerías")
-    st.dataframe(df_librerias, use_container_width=True)
-
+    st.header("Librerías"); st.dataframe(df_librerias, use_container_width=True)
 with tab6:
-    st.header("Bloc General")
-    st.text_area("Notas", height=300)
+    st.header("Bloc General"); st.text_area("Notas", height=300)
