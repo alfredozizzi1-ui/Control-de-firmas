@@ -198,3 +198,55 @@ with tab5:
     st.header("Librerías"); st.dataframe(df_librerias, use_container_width=True)
 with tab6:
     st.header("Bloc General"); st.text_area("Notas", height=300)
+
+# ==========================================
+# --- MÓDULO DE PUBLICACIÓN EN FACEBOOK ---
+# ==========================================
+
+def publicar_en_facebook(mensaje, url_imagen):
+    """
+    Gestiona la comunicación con la API de Facebook para publicar contenido.
+    """
+    try:
+        page_id = st.secrets["meta"]["page_id"]
+        token = st.secrets["meta"]["page_access_token"]
+        
+        url = f"https://graph.facebook.com/v18.0/{page_id}/photos"
+        
+        payload = {
+            'url': url_imagen,
+            'caption': mensaje,
+            'access_token': token
+        }
+        
+        response = requests.post(url, data=payload)
+        resultado = response.json()
+        
+        if response.status_code == 200:
+            return True, "¡Publicación enviada con éxito a Facebook! 🚀"
+        else:
+            error_msg = resultado.get('error', {}).get('message', 'Error desconocido en la API de Meta')
+            return False, f"Error al publicar: {error_msg}"
+            
+    except Exception as e:
+        return False, f"Fallo crítico en la conexión con Meta: {str(e)}"
+
+# Sección visual en la interfaz para probar la publicación
+st.markdown("---")
+st.markdown("### 📱 Publicación en Redes Sociales (Facebook)")
+
+texto_evento_fb = st.text_area("Texto del evento para Facebook:", "¡No te pierdas nuestro próximo evento con Atlántida Distribuciones!")
+url_cartel_fb = st.text_input("URL pública del cartel (imagen):", placeholder="Ej: https://ejemplo.com/cartel.jpg")
+
+if st.button("🚀 Publicar en Redes Sociales"):
+    if not url_cartel_fb:
+        st.warning("Por favor, introduce una URL válida para la imagen.")
+    else:
+        with st.spinner("Conectando con Facebook..."):
+            exito, mensaje = publicar_en_facebook(texto_evento_fb, url_cartel_fb)
+            
+            if exito:
+                st.success(mensaje)
+            else:
+                st.error(mensaje)
+                st.info("Revisa que la URL de la imagen sea accesible públicamente.")
