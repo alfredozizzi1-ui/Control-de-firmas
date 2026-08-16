@@ -163,8 +163,11 @@ with tab3:
                 if not autor_info.empty and "Email" in autor_info.columns:
                     destinatario = autor_info.iloc[0]["Email"]
                     if not pd.isna(destinatario) and str(destinatario).strip() != "":
-                        if edit_cartel_url and edit_cartel_url.strip():
-                            info_cartel = f"Puedes consultar el cartel del evento aquí:\n{edit_cartel_url}"
+                        
+                        # Comprobación estricta para evitar que detecte "nan" o vacíos
+                        cartel_texto = str(edit_cartel_url).strip()
+                        if cartel_texto and cartel_texto.lower() != "nan":
+                            info_cartel = f"Puedes consultar el cartel del evento aquí:\n{cartel_texto}"
                         else:
                             info_cartel = "En este momento estamos finalizando el diseño del cartel. Te lo haremos llegar en un próximo correo en cuanto esté disponible."
                         
