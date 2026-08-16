@@ -231,22 +231,54 @@ def publicar_en_facebook(mensaje, url_imagen):
     except Exception as e:
         return False, f"Fallo crítico en la conexión con Meta: {str(e)}"
 
-# Sección visual en la interfaz para probar la publicación
+# ==========================================
+# --- AUTOMATIZACIÓN DESDE AIRTABLE ---
+# ==========================================
+
 st.markdown("---")
-st.markdown("### 📱 Publicación en Redes Sociales (Facebook)")
+st.markdown("### 📚 Publicar Evento de Airtable en Facebook")
 
-texto_evento_fb = st.text_area("Texto del evento para Facebook:", "¡No te pierdas nuestro próximo evento con Atlántida Distribuciones!")
-url_cartel_fb = st.text_input("URL pública del cartel (imagen):", placeholder="Ej: https://ejemplo.com/cartel.jpg")
+# Usamos la tabla de eventos que ya descargas de Airtable (por ejemplo, df_eventos)
+# Creamos una etiqueta combinada para identificar el evento fácilmente en el desplegable
+df_eventos["opcion_menu"] = df_eventos["id"].astype(str) + " - " + df_eventos["evento"] + " (" + df_eventos["lugar"] + ")"
 
-if st.button("🚀 Publicar en Redes Sociales"):
-    if not url_cartel_fb:
-        st.warning("Por favor, introduce una URL válida para la imagen.")
+evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_eventos["opcion_menu"])
+
+# Filtramos la fila seleccionada
+fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
+
+# Extraemos los datos usando tus nombres exactos de columnas
+tipo_evento = fila["evento"]
+lugar_evento = fila["lugar"]
+url_imagen_db = str(fila["cartel_url"])
+
+# Limpiamos o transformamos la URL de Drive si viene en formato web normal
+if "drive.google.com" in url_imagen_db and "/file/d/" in url_imagen_db:
+    # Extraemos el ID automáticamente por si se guardó el enlace largo de compartir
+    import re
+    match = re.search(r'/d/([a-zA-Z0-9_-]+)', url_imagen_db)
+    if match:
+        file_id = match.group(1)
+        url_imagen_db = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+# Armamos el texto automático
+mensaje_auto = f"¡No te pierdas nuestro próximo evento! 📖✨ Tendremos '{tipo_evento}' en {lugar_evento} con Atlántida Distribuciones. ¡Te esperamos!"
+
+# Vista previa en la app
+st.text_area("Mensaje que se publicará:", mensaje_auto, height=100)
+if url_imagen_db and url_imagen_db != "nan":
+    st.image(url_imagen_db, width=300, caption="Cartel asociado")
+else:
+    st.warning("Este evento no tiene una 'cartel_url' válida en Airtable.")
+
+if st.button("🚀 Publicar este Evento de Airtable"):
+    if not url_imagen_db or url_imagen_db == "nan":
+        st.error("Falta la URL del cartel en Airtable para poder publicar la imagen.")
     else:
-        with st.spinner("Conectando con Facebook..."):
-            exito, mensaje = publicar_en_facebook(texto_evento_fb, url_cartel_fb)
+        with st.spinner("Enviando publicación a Facebook..."):
+            exito, mensaje = publicar_en_facebook(mensaje_auto, url_imagen_db)
             
             if exito:
                 st.success(mensaje)
             else:
                 st.error(mensaje)
-                st.info("Revisa que la URL de la imagen sea accesible públicamente.")
