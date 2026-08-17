@@ -246,7 +246,10 @@ df_eventos["opcion_menu"] = df_eventos["id"].astype(str) + " - " + df_eventos["e
 evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_eventos["opcion_menu"])
 
 # Filtramos la fila seleccionada
-fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
+fila = df_events[df_events["opcion_menu"] == evento_elegido].iloc[0]
+
+# --- LÍNEA DE PRUEBA NUEVA ---
+st.write("Valor real leído de cartel_url:", repr(fila.get("cartel_url")))
 
 # Extraemos los datos
 tipo_evento = str(fila.get("evento", ""))
