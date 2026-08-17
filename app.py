@@ -221,15 +221,30 @@ if not df_eventos.empty:
     evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_eventos["opcion_menu"])
     fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
 
+    # Preparar datos para el texto
+    autor_v = str(fila.get('Autor', ''))
+    lugar_v = str(fila.get('lugar', ''))
+    evento_v = str(fila.get('evento', ''))
+    try:
+        fecha_obj = pd.to_datetime(fila.get('fecha'))
+        fecha_v = fecha_obj.strftime('%d/%m/%Y')
+    except:
+        fecha_v = str(fila.get('fecha', ''))
+    hora_v = str(fila.get('hora_inicio', ''))
+
+    mensaje_auto = (
+        f"¡No te pierdas nuestro nuevo evento! 📖✨\n\n"
+        f"Presentación del nuevo libro de {autor_v} el día {fecha_v} a las {hora_v} horas en {lugar_v}.\n\n"
+        f"¡Te esperamos para compartir una jornada literaria inolvidable! 🖋️📚"
+    )
+
+    st.text_area("Mensaje que se publicará:", mensaje_auto, height=150)
+
     cartel_val = fila.get("cartel_url", "")
     imagen_final = ""
     if isinstance(cartel_val, str) and os.path.exists(cartel_val): imagen_final = cartel_val
     elif isinstance(cartel_val, list) and len(cartel_val) > 0: imagen_final = cartel_val[0].get("url", "")
     elif isinstance(cartel_val, str) and cartel_val.startswith("http"): imagen_final = cartel_val
-
-    mensaje_auto = f"¡No te pierdas nuestro evento! '{str(fila.get('evento', ''))}' en {fila.get('lugar', '')} con Atlántida Distribuciones."
-
-    st.text_area("Mensaje que se publicará:", mensaje_auto, height=100)
 
     archivo_subido_extra = st.file_uploader("O sube/cambia el cartel aquí mismo:", type=["jpg", "jpeg", "png"], key="extra_subida")
     if archivo_subido_extra is not None:
@@ -238,11 +253,13 @@ if not df_eventos.empty:
         imagen_final = temp_path
 
     if imagen_final: st.image(imagen_final, width=300)
+    
     if st.button("🚀 Publicar en Facebook con Imagen"):
         if not imagen_final: st.error("Falta imagen.")
         else:
-            exito, mensaje = publicar_en_facebook(mensaje_auto, imagen_final)
-            if exito: st.success(mensaje)
-            else: st.error(mensaje)
+            with st.spinner("Subiendo imagen y publicando en Facebook..."):
+                exito, mensaje = publicar_en_facebook(mensaje_auto, imagen_final)
+                if exito: st.success(mensaje)
+                else: st.error(mensaje)
 else:
     st.info("No hay eventos disponibles.")
