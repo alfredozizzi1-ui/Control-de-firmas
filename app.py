@@ -4,6 +4,7 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, time, date
+import re
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
@@ -235,60 +236,55 @@ def publicar_en_facebook(mensaje, url_imagen):
 # --- AUTOMATIZACIÓN DESDE AIRTABLE ---
 # ==========================================
 
-import re
-
 st.markdown("---")
 st.markdown("### 📚 Publicar Evento de Airtable en Facebook")
 
-# Creamos una etiqueta combinada para identificar el evento
-df_events["opcion_menu"] = df_events["id"].astype(str) + " - " + df_events["evento"].astype(str) + " (" + df_events["lugar"].astype(str) + ")"
+if not df_eventos.empty:
+    # Creamos una etiqueta combinada para identificar el evento
+    df_eventos["opcion_menu"] = df_eventos["id"].astype(str) + " - " + df_eventos["evento"].astype(str) + " (" + df_eventos["lugar"].astype(str) + ")"
 
-evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_events["opcion_menu"])
+    evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_eventos["opcion_menu"])
 
-# Filtramos la fila seleccionada
-fila = df_events[df_events["opcion_menu"] == evento_elegido].iloc[0]
+    # Filtramos la fila seleccionada
+    fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
 
-# Extraemos los datos limpios
-tipo_evento = str(fila.get("evento", ""))
-lugar_evento = str(fila.get("lugar", ""))
-autor_evento = str(fila.get("Autor", ""))
-url_imagen_db = str(fila.get("cartel_url", ""))
+    # Extraemos los datos limpios
+    tipo_evento = str(fila.get("evento", ""))
+    lugar_evento = str(fila.get("lugar", ""))
+    autor_evento = str(fila.get("Autor", ""))
+    url_imagen_db = str(fila.get("cartel_url", ""))
 
-# Limpiamos posibles nulos de Pandas
-if url_imagen_db == "nan" or not url_imagen_db.startswith("http"):
-    url_imagen_db = ""
+    # Limpiamos posibles nulos de Pandas
+    if url_imagen_db == "nan" or not url_imagen_db.startswith("http"):
+        url_imagen_db = ""
 
-# Si es un enlace de Google Drive, convertirlo automáticamente a descarga directa
-if "drive.google.com" in url_imagen_db and "/file/d/" in url_imagen_db:
-    match_id = re.search(r'/d/([a-zA-Z0-9_-]+)', url_imagen_db)
-    if match_id:
-        url_imagen_db = f"https://drive.google.com/uc?export=download&id={match_id.group(1)}"
+    # Si es un enlace de Google Drive, convertirlo automáticamente a descarga directa
+    if "drive.google.com" in url_imagen_db and "/file/d/" in url_imagen_db:
+        match_id = re.search(r'/d/([a-zA-Z0-9_-]+)', url_imagen_db)
+        if match_id:
+            url_imagen_db = f"https://drive.google.com/uc?export=download&id={match_id.group(1)}"
 
-# Si es un enlace de Google Drive, convertirlo automáticamente a descarga directa
-if "drive.google.com" in url_imagen_db and "/file/d/" in url_imagen_db:
-    match_id = re.search(r'/d/([a-zA-Z0-9_-]+)', url_imagen_db)
-    if match_id:
-        url_imagen_db = f"https://drive.google.com/uc?export=download&id={match_id.group(1)}"
+    # Armamos el texto automático (añade el autor si existe y no está pendiente)
+    texto_autor = f" con {autor_evento}" if autor_evento and autor_evento.lower() != "autor pendiente" and autor_evento != "nan" else ""
+    mensaje_auto = f"¡No te pierdas nuestro próximo evento! 📖✨ Tendremos '{tipo_evento}'{texto_autor} en {lugar_evento} con Atlántida Distribuciones. ¡Te esperamos!"
 
-# Armamos el texto automático (añade el autor si existe y no está pendiente)
-texto_autor = f" con {autor_evento}" if autor_evento and autor_evento.lower() != "autor pendiente" and autor_evento != "nan" else ""
-mensaje_auto = f"¡No te pierdas nuestro próximo evento! 📖✨ Tendremos '{tipo_evento}'{texto_autor} en {lugar_evento} con Atlántida Distribuciones. ¡Te esperamos!"
+    # Mostrar vista previa en Streamlit
+    st.text_area("Mensaje que se publicará:", mensaje_auto, height=100)
 
-# Mostrar vista previa en Streamlit
-st.text_area("Mensaje que se publicará:", mensaje_auto, height=100)
-
-if url_imagen_db:
-    st.image(url_imagen_db, width=300, caption="Cartel asociado")
-else:
-    st.warning("Este evento no tiene un cartel o enlace válido asignado en Airtable.")
-
-if st.button("🚀 Publicar este Evento de Airtable"):
-    if not url_imagen_db:
-        st.error("Falta la URL del cartel para poder publicar la imagen en Facebook.")
+    if url_imagen_db:
+        st.image(url_imagen_db, width=300, caption="Cartel asociado")
     else:
-        with st.spinner("Enviando publicación a Facebook..."):
-            exito, mensaje = publicar_en_facebook(mensaje_auto, url_imagen_db)
-            if exito:
-                st.success(mensaje)
-            else:
-                st.error(mensaje)
+        st.warning("Este evento no tiene un cartel o enlace válido asignado en Airtable.")
+
+    if st.button("🚀 Publicar este Evento de Airtable"):
+        if not url_imagen_db:
+            st.error("Falta la URL del cartel para poder publicar la imagen en Facebook.")
+        else:
+            with st.spinner("Enviando publicación a Facebook..."):
+                exito, mensaje = publicar_en_facebook(mensaje_auto, url_imagen_db)
+                if exito:
+                    st.success(mensaje)
+                else:
+                    st.error(mensaje)
+else:
+    st.info("No hay eventos disponibles para publicar.")
