@@ -8,7 +8,7 @@ import re
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
-st.caption("Gestión interna sincronizada mediante API directa com Airtable.")
+st.caption("Gestión interna sincronizada mediante API directa con Airtable.")
 
 # --- CONFIGURACIÓN EMAIL ---
 def enviar_email(destinatario, asunto, cuerpo):
@@ -122,7 +122,7 @@ with tab2:
         hora_fin = col_f3.time_input("Fin", value=time(19, 30))
         evento = st.text_input("Evento")
         anotaciones_evento = st.text_area("Anotaciones")
-        cartel_enlace = st.text_input("Enlace del Cartel (Drive)")
+        cartel_enlace = st.text_input("Enlace o ruta del Cartel")
         confirmado = st.checkbox("¿Evento confirmado?")
 
         if st.form_submit_button("Guardar Evento"):
@@ -159,7 +159,6 @@ with tab3:
                 edit_hora_fin = st.time_input("Hora de Fin", value=h_fin_val)
             
             edit_evento_desc = st.text_input("Evento", value=fila.get("evento", ""))
-            edit_cartel_url = st.text_input("Enlace Cartel", value=fila.get("cartel_url", ""))
             
             if st.form_submit_button("Guardar Cambios"):
                 datos_actualizacion = {
@@ -168,8 +167,7 @@ with tab3:
                     "fecha": str(edit_fecha), 
                     "hora_inicio": edit_hora_inicio.strftime("%H:%M"),
                     "hora_fin": edit_hora_fin.strftime("%H:%M"),
-                    "evento": edit_evento_desc, 
-                    "cartel_url": edit_cartel_url.strip()
+                    "evento": edit_evento_desc
                 }
                 if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                     st.success("¡Actualizado!"); st.rerun()
@@ -178,11 +176,8 @@ with tab3:
                 autor_info = df_autores[df_autores["Nombre"].astype(str).str.strip() == edit_autor.strip()]
                 lib_info = df_librerias[df_librerias["Nombre"].astype(str).str.strip() == edit_lugar.strip()]
                 
-                cartel_texto = str(edit_cartel_url).strip()
-                info_cartel = f"Puedes consultar el cartel del evento aquí:\n{cartel_texto}" if (cartel_texto and cartel_texto.lower() != "nan") else "En este momento estamos finalizando el diseño del cartel. Te lo haremos llegar en un próximo correo en cuanto esté disponible."
-                
                 asunto = f"Confirmación de Evento: {edit_evento_desc} - {edit_lugar}"
-                cuerpo = f"Estimado/a,\n\nDesde Atlántida Distribuciones, confirmamos los detalles del evento:\n\nEVENTO: {edit_evento_desc}\nFECHA: {edit_fecha.strftime('%d de %B de %Y')}\nHORARIO: {edit_hora_inicio.strftime('%H:%M')} - {edit_hora_fin.strftime('%H:%M')}\nLUGAR: {edit_lugar}\n\n{info_cartel}\n\nUn saludo.\n\nAtlántida Distribuciones"
+                cuerpo = f"Estimado/a,\n\nDesde Atlántida Distribuciones, confirmamos los detalles del evento:\n\nEVENTO: {edit_evento_desc}\nFECHA: {edit_fecha.strftime('%d de %B de %Y')}\nHORARIO: {edit_hora_inicio.strftime('%H:%M')} - {edit_hora_fin.strftime('%H:%M')}\nLUGAR: {edit_lugar}\n\nUn saludo.\n\nAtlántida Distribuciones"
                 
                 errores = []
                 for label, info in [("Autor", autor_info), ("Librería", lib_info)]:
@@ -244,14 +239,14 @@ if not df_eventos.empty:
     tipo_evento = str(fila.get("evento", ""))
     lugar_evento = str(fila.get("lugar", ""))
     autor_evento = str(fila.get("Autor", ""))
-    url_imagen_db = str(fila.get("cartel_url", ""))
-
-    if url_imagen_db == "nan": url_imagen_db = ""
-
-    if "drive.google.com" in url_imagen_db:
-        match_id = re.search(r'/d/([a-zA-Z0-9_-]+)', url_imagen_db)
-        if match_id:
-            url_imagen_db = f"https://drive.google.com/uc?export=view&id={match_id.group(1)}"
+    
+    # Extracción de la URL si el campo es de tipo "Archivos adjuntos" (Attachment) en Airtable
+    cartel_raw = fila.get("cartel_url", "")
+    url_imagen_db = ""
+    if isinstance(cartel_raw, list) and len(cartel_raw) > 0:
+        url_imagen_db = cartel_raw[0].get("url", "")
+    elif isinstance(cartel_raw, str) and cartel_raw.startswith("http"):
+        url_imagen_db = cartel_raw
 
     texto_autor = f" con {autor_evento}" if autor_evento and autor_evento.lower() != "autor pendiente" and autor_evento != "nan" else ""
     mensaje_auto = f"¡No te pierdas nuestro próximo evento! 📖✨ Tendremos '{tipo_evento}'{texto_autor} en {lugar_evento} con Atlántida Distribuciones. ¡Te esperamos!"
@@ -262,13 +257,13 @@ if not df_eventos.empty:
         try:
             st.image(url_imagen_db, width=300, caption="Cartel asociado")
         except Exception:
-            st.info("ℹ️ El enlace está registrado, pero Google Drive bloquea la vista previa directa en pantalla. Aun así, puedes proceder a publicar.")
+            st.info("ℹ️ Imagen cargada desde adjunto de Airtable.")
     else:
-        st.warning("Este evento no tiene un cartel válido.")
+        st.warning("Este evento no tiene ningún archivo de cartel adjunto en Airtable.")
 
     if st.button("🚀 Publicar este Evento de Airtable"):
         if not url_imagen_db:
-            st.error("Falta una URL válida.")
+            st.error("Falta la imagen adjunta para poder publicar.")
         else:
             with st.spinner("Enviando a Facebook..."):
                 exito, mensaje = publicar_en_facebook(mensaje_auto, url_imagen_db)
