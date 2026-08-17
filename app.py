@@ -190,17 +190,19 @@ with tab6:
 
 def publicar_en_facebook(mensaje, imagen_path_o_url):
     try:
-        page_id = st.secrets["meta"]["page_id"]
-        token = st.secrets["meta"]["page_access_token"]
+        page_id = st.secrets["meta"]["page_id"].strip()
+        token = st.secrets["meta"]["page_access_token"].strip()
         url = f"https://graph.facebook.com/v18.0/{page_id}/photos"
+        
         if os.path.exists(imagen_path_o_url):
             with open(imagen_path_o_url, 'rb') as img_file:
                 files = {'source': img_file}
-                payload = {'caption': mensaje, 'access_token': token}
+                payload = {'message': mensaje, 'access_token': token}
                 response = requests.post(url, data=payload, files=files)
         else:
             payload = {'url': imagen_path_o_url, 'caption': mensaje, 'access_token': token}
             response = requests.post(url, data=payload)
+            
         resultado = response.json()
         if response.status_code == 200:
             return True, "¡Publicación enviada con éxito a Facebook! 🚀"
