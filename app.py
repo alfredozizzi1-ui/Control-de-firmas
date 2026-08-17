@@ -8,7 +8,7 @@ import re
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
-st.caption("Gestión interna sincronizada mediante API directa con Airtable.")
+st.caption("Gestión interna sincronizada mediante API directa com Airtable.")
 
 # --- CONFIGURACIÓN EMAIL ---
 def enviar_email(destinatario, asunto, cuerpo):
@@ -248,7 +248,6 @@ if not df_eventos.empty:
 
     if url_imagen_db == "nan": url_imagen_db = ""
 
-    # FORZAR DESCARGA DIRECTA DE DRIVE
     if "drive.google.com" in url_imagen_db:
         match_id = re.search(r'/d/([a-zA-Z0-9_-]+)', url_imagen_db)
         if match_id:
@@ -260,7 +259,10 @@ if not df_eventos.empty:
     st.text_area("Mensaje que se publicará:", mensaje_auto, height=100)
 
     if url_imagen_db:
-        st.image(url_imagen_db, width=300, caption="Cartel asociado")
+        try:
+            st.image(url_imagen_db, width=300, caption="Cartel asociado")
+        except Exception:
+            st.info("ℹ️ El enlace está registrado, pero Google Drive bloquea la vista previa directa en pantalla. Aun así, puedes proceder a publicar.")
     else:
         st.warning("Este evento no tiene un cartel válido.")
 
