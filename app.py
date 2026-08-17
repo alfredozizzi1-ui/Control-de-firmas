@@ -243,13 +243,19 @@ st.markdown("### 📚 Publicar Evento de Airtable en Facebook")
 # Creamos una etiqueta combinada para identificar el evento
 df_eventos["opcion_menu"] = df_eventos["id"].astype(str) + " - " + df_eventos["evento"].astype(str) + " (" + df_eventos["lugar"].astype(str) + ")"
 
-evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_eventos["opcion_menu"])
-
-# Filtramos la fila seleccionada
-fila = df_events[df_events["opcion_menu"] == evento_elegido].iloc[0]
-
-# --- LÍNEA DE PRUEBA NUEVA ---
-st.write("Valor real leído de cartel_url:", repr(fila.get("cartel_url")))
+if "df_events" in locals() and not df_events.empty:
+    evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_events["opcion_menu"])
+    
+    # Filtramos la fila seleccionada de forma segura
+    fila = df_events[df_events["opcion_menu"] == evento_elegido].iloc[0]
+    
+    # --- LÍNEA DE PRUEBA ---
+    st.write("Valor real leído de cartel_url:", repr(fila.get("cartel_url")))
+    
+    tipo_evento = str(fila.get("evento", ""))
+    lugar_evento = str(fila.get("lugar", ""))
+    autor_evento = str(fila.get("Autor", ""))
+    url_imagen_db = str(fila.get("cartel_url", ""))
 
 # Extraemos los datos
 tipo_evento = str(fila.get("evento", ""))
