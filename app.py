@@ -5,10 +5,15 @@ import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, time, date
 import re
+import os
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
 st.caption("Gestión interna sincronizada mediante API directa con Airtable.")
+
+# Crear carpeta local para guardar los carteles subidos si no existe
+if not os.path.exists("carteles"):
+    os.makedirs("carteles")
 
 # --- CONFIGURACIÓN EMAIL ---
 def enviar_email(destinatario, asunto, cuerpo):
@@ -122,14 +127,20 @@ with tab2:
         hora_fin = col_f3.time_input("Fin", value=time(19, 30))
         evento = st.text_input("Evento")
         anotaciones_evento = st.text_area("Anotaciones")
-        cartel_enlace = st.text_input("Enlace o ruta del Cartel")
+        cartel_file = st.file_uploader("Sube la imagen del cartel", type=["jpg", "jpeg", "png"])
         confirmado = st.checkbox("¿Evento confirmado?")
 
         if st.form_submit_button("Guardar Evento"):
-            if not autor_final or not libreria_final: st.error("Completa Autor y Librería.")
+            if not autor_final or not libreria_final: 
+                st.error("Completa Autor y Librería.")
             else:
+                cartel_path = ""
+                if cartel_file is not None:
+                    cartel_path = os.path.join("carteles", cartel_file.name)
+                    with open(cartel_path, "wb") as f:
+                        f.write(cartel_file.getbuffer())
                 nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns else 1
-                record = {"id": str(nuevo_id), "Autor": autor_final, "fecha": str(fecha_sel), "hora_inicio": hora_inicio.strftime("%H:%M"), "hora_fin": hora_fin.strftime("%H:%M"), "lugar": libreria_final, "evento": evento, "anotaciones": anotaciones_evento, "cartel_url": cartel_enlace.strip(), "confirmado": bool(confirmado)}
+                record = {"id": str(nuevo_id), "Autor": autor_final, "fecha": str(fecha_sel), "hora_inicio": hora_inicio.strftime("%H:%M"), "hora_fin": hora_fin.strftime("%H:%M"), "lugar": libreria_final, "evento": evento, "anotaciones": anotaciones_evento, "cartel_url": cartel_path, "confirmado": bool(confirmado)}
                 if guardar_dato("eventos", record):
                     st.success("¡Evento guardado!"); st.rerun()
 
@@ -146,6 +157,7 @@ with tab3:
             edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
             edit_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
             edit_fecha = st.date_input("Fecha", value=pd.to_datetime(fila.get("fecha")).date())
+            edit_cartel_file = st.file_uploader("Cambiar imagen del cartel", type=["jpg", "jpeg", "png"])
             
             col_h1, col_h2 = st.columns(2)
             try: h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
@@ -161,14 +173,7 @@ with tab3:
             edit_evento_desc = st.text_input("Evento", value=fila.get("evento", ""))
             
             if st.form_submit_button("Guardar Cambios"):
-                datos_actualizacion = {
-                    "Autor": edit_autor, 
-                    "lugar": edit_lugar, 
-                    "fecha": str(edit_fecha), 
-                    "hora_inicio": edit_hora_inicio.strftime("%H:%M"),
-                    "hora_fin": edit_hora_fin.strftime("%H:%M"),
-                    "evento": edit_evento_desc
-                }
+                datos_actualizacion = {"Autor": edit_autor, "lugar": edit_lugar, "fecha": str(edit_fecha), "hora_inicio": edit_hora_inicio.strftime("%H:%M"), "hora_fin": edit_hora_fin.strftime("%H:%M"), "evento": edit_evento_desc}
                 if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                     st.success("¡Actualizado!"); st.rerun()
 
@@ -183,13 +188,19 @@ with tab6:
 # --- MÓDULO DE PUBLICACIÓN EN FACEBOOK ---
 # ==========================================
 
-def publicar_en_facebook(mensaje, url_imagen):
+def publicar_en_facebook(mensaje, imagen_path_o_url):
     try:
         page_id = st.secrets["meta"]["page_id"]
         token = st.secrets["meta"]["page_access_token"]
         url = f"https://graph.facebook.com/v18.0/{page_id}/photos"
-        payload = {'url': url_imagen, 'caption': mensaje, 'access_token': token}
-        response = requests.post(url, data=payload)
+        if os.path.exists(imagen_path_o_url):
+            with open(imagen_path_o_url, 'rb') as img_file:
+                files = {'source': img_file}
+                payload = {'caption': mensaje, 'access_token': token}
+                response = requests.post(url, data=payload, files=files)
+        else:
+            payload = {'url': imagen_path_o_url, 'caption': mensaje, 'access_token': token}
+            response = requests.post(url, data=payload)
         resultado = response.json()
         if response.status_code == 200:
             return True, "¡Publicación enviada con éxito a Facebook! 🚀"
@@ -203,39 +214,34 @@ def publicar_en_facebook(mensaje, url_imagen):
 # ==========================================
 
 st.markdown("---")
-st.markdown("### 📚 Publicar Evento de Airtable en Facebook")
+st.markdown("### 📚 Publicar Evento en Facebook")
 
 if not df_eventos.empty:
     df_eventos["opcion_menu"] = df_eventos["id"].astype(str) + " - " + df_eventos["evento"].astype(str) + " (" + df_eventos["lugar"].astype(str) + ")"
     evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_eventos["opcion_menu"])
     fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
 
-    cartel_raw = fila.get("cartel_url", "")
-    
-    url_imagen_db = ""
-    if isinstance(cartel_raw, list) and len(cartel_raw) > 0:
-        url_imagen_db = cartel_raw[0].get("url", "")
-    elif isinstance(cartel_raw, str) and cartel_raw.startswith("http"):
-        url_imagen_db = cartel_raw
+    cartel_val = fila.get("cartel_url", "")
+    imagen_final = ""
+    if isinstance(cartel_val, str) and os.path.exists(cartel_val): imagen_final = cartel_val
+    elif isinstance(cartel_val, list) and len(cartel_val) > 0: imagen_final = cartel_val[0].get("url", "")
+    elif isinstance(cartel_val, str) and cartel_val.startswith("http"): imagen_final = cartel_val
 
-    tipo_evento = str(fila.get("evento", ""))
-    mensaje_auto = f"¡No te pierdas nuestro evento! '{tipo_evento}' en {fila.get('lugar', '')} con Atlántida Distribuciones."
+    mensaje_auto = f"¡No te pierdas nuestro evento! '{str(fila.get('evento', ''))}' en {fila.get('lugar', '')} con Atlántida Distribuciones."
 
     st.text_area("Mensaje que se publicará:", mensaje_auto, height=100)
 
-    if url_imagen_db:
-        try:
-            st.image(url_imagen_db, width=300, caption="Cartel asociado")
-        except Exception:
-            st.info("ℹ️ Archivo adjunto cargado desde Airtable.")
-    else:
-        st.warning("Este evento no tiene ningún archivo adjunto válido en Airtable.")
+    archivo_subido_extra = st.file_uploader("O sube/cambia el cartel aquí mismo:", type=["jpg", "jpeg", "png"], key="extra_subida")
+    if archivo_subido_extra is not None:
+        temp_path = os.path.join("carteles", archivo_subido_extra.name)
+        with open(temp_path, "wb") as f: f.write(archivo_subido_extra.getbuffer())
+        imagen_final = temp_path
 
-    if st.button("🚀 Publicar en Facebook"):
-        if not url_imagen_db:
-            st.error("Falta imagen adjunta.")
+    if imagen_final: st.image(imagen_final, width=300)
+    if st.button("🚀 Publicar en Facebook con Imagen"):
+        if not imagen_final: st.error("Falta imagen.")
         else:
-            exito, mensaje = publicar_en_facebook(mensaje_auto, url_imagen_db)
+            exito, mensaje = publicar_en_facebook(mensaje_auto, imagen_final)
             if exito: st.success(mensaje)
             else: st.error(mensaje)
 else:
