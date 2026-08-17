@@ -252,13 +252,7 @@ fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
 tipo_evento = str(fila.get("evento", ""))
 lugar_evento = str(fila.get("lugar", ""))
 autor_evento = str(fila.get("Autor", ""))
-
-# Obtener el texto del cartel (busca en la columna 'Cartel' o 'cartel_url')
-campo_cartel = str(fila.get("Cartel", fila.get("cartel_url", "")))
-
-    # Extraemos la URL limpia mediante Expresión Regular
-    match_url = re.search(r'https?://[^\s"\'>\)]+', campo_cartel)
-    url_imagen_db = match_url.group(0) if match_url else ""
+url_imagen_db = str(fila.get("Cartel", fila.get("cartel_url", "")))
 
 # Si es un enlace de Google Drive, convertirlo automáticamente a descarga directa
 if "drive.google.com" in url_imagen_db and "/file/d/" in url_imagen_db:
