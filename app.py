@@ -211,7 +211,6 @@ if not df_eventos.empty:
     fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
 
     cartel_raw = fila.get("cartel_url", "")
-    st.write("Valor crudo recibido de Airtable en cartel_url:", repr(cartel_raw))
     
     url_imagen_db = ""
     if isinstance(cartel_raw, list) and len(cartel_raw) > 0:
@@ -225,14 +224,19 @@ if not df_eventos.empty:
     st.text_area("Mensaje que se publicará:", mensaje_auto, height=100)
 
     if url_imagen_db:
-        st.image(url_imagen_db, width=300)
+        try:
+            st.image(url_imagen_db, width=300, caption="Cartel asociado")
+        except Exception:
+            st.info("ℹ️ Archivo adjunto cargado desde Airtable.")
     else:
-        st.warning("No se ha podido extraer una URL de imagen válida del campo.")
+        st.warning("Este evento no tiene ningún archivo adjunto válido en Airtable.")
 
     if st.button("🚀 Publicar en Facebook"):
         if not url_imagen_db:
-            st.error("Falta imagen.")
+            st.error("Falta imagen adjunta.")
         else:
             exito, mensaje = publicar_en_facebook(mensaje_auto, url_imagen_db)
             if exito: st.success(mensaje)
             else: st.error(mensaje)
+else:
+    st.info("No hay eventos disponibles.")
