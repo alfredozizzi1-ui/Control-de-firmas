@@ -248,21 +248,21 @@ evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_events["opc
 # Filtramos la fila seleccionada
 fila = df_events[df_events["opcion_menu"] == evento_elegido].iloc[0]
 
-# --- LÍNEA DE PRUEBA ---
-st.write("Valor real leído de cartel_url:", repr(fila.get("cartel_url")))
-
+# Extraemos los datos limpios
 tipo_evento = str(fila.get("evento", ""))
 lugar_evento = str(fila.get("lugar", ""))
 autor_evento = str(fila.get("Autor", ""))
 url_imagen_db = str(fila.get("cartel_url", ""))
 
-# Extraemos los datos
-tipo_evento = str(fila.get("evento", ""))
-lugar_evento = str(fila.get("lugar", ""))
-autor_evento = str(fila.get("Autor", ""))
-url_imagen_db = str(fila.get("cartel_url", ""))
+# Limpiamos posibles nulos de Pandas
 if url_imagen_db == "nan" or not url_imagen_db.startswith("http"):
     url_imagen_db = ""
+
+# Si es un enlace de Google Drive, convertirlo automáticamente a descarga directa
+if "drive.google.com" in url_imagen_db and "/file/d/" in url_imagen_db:
+    match_id = re.search(r'/d/([a-zA-Z0-9_-]+)', url_imagen_db)
+    if match_id:
+        url_imagen_db = f"https://drive.google.com/uc?export=download&id={match_id.group(1)}"
 
 # Si es un enlace de Google Drive, convertirlo automáticamente a descarga directa
 if "drive.google.com" in url_imagen_db and "/file/d/" in url_imagen_db:
