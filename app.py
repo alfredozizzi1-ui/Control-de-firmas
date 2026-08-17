@@ -103,7 +103,7 @@ with tab1:
         
         columnas_ordenadas = ["id", "Autor", "fecha", "hora_inicio", "hora_fin", "lugar", "evento", "confirmado", "anotaciones", "cartel_url"]
         df_display = df_display[[c for c in columnas_ordenadas if c in df_display.columns]]
-        st.dataframe(df_display, use_container_width=True, hide_index=True, column_config={"cartel_url": st.column_config.LinkColumn("Cartel", display_text="Ver cartel 🖼️"), "confirmado": st.column_config.CheckboxColumn("Confirmado")})
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
 
 with tab2:
     st.header("Dar de alta un nuevo evento")
@@ -171,22 +171,6 @@ with tab3:
                 }
                 if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                     st.success("¡Actualizado!"); st.rerun()
-            
-            if st.form_submit_button("📧 Enviar Notificación a Autor y Librería"):
-                autor_info = df_autores[df_autores["Nombre"].astype(str).str.strip() == edit_autor.strip()]
-                lib_info = df_librerias[df_librerias["Nombre"].astype(str).str.strip() == edit_lugar.strip()]
-                
-                asunto = f"Confirmación de Evento: {edit_evento_desc} - {edit_lugar}"
-                cuerpo = f"Estimado/a,\n\nDesde Atlántida Distribuciones, confirmamos los detalles del evento:\n\nEVENTO: {edit_evento_desc}\nFECHA: {edit_fecha.strftime('%d de %B de %Y')}\nHORARIO: {edit_hora_inicio.strftime('%H:%M')} - {edit_hora_fin.strftime('%H:%M')}\nLUGAR: {edit_lugar}\n\nUn saludo.\n\nAtlántida Distribuciones"
-                
-                errores = []
-                for label, info in [("Autor", autor_info), ("Librería", lib_info)]:
-                    if not info.empty and "Email" in info.columns and not pd.isna(info.iloc[0]["Email"]):
-                        if not enviar_email(info.iloc[0]["Email"], asunto, cuerpo): errores.append(f"{label} (Error SMTP)")
-                    else: errores.append(f"{label} (Sin email o no encontrado)")
-                
-                if not errores: st.success("✅ Notificaciones enviadas correctamente.")
-                else: st.error(f"❌ Fallo al enviar a: {', '.join(errores)}")
 
 with tab4:
     st.header("Autores"); st.dataframe(df_autores, use_container_width=True)
@@ -203,26 +187,16 @@ def publicar_en_facebook(mensaje, url_imagen):
     try:
         page_id = st.secrets["meta"]["page_id"]
         token = st.secrets["meta"]["page_access_token"]
-        
         url = f"https://graph.facebook.com/v18.0/{page_id}/photos"
-        
-        payload = {
-            'url': url_imagen,
-            'caption': mensaje,
-            'access_token': token
-        }
-        
+        payload = {'url': url_imagen, 'caption': mensaje, 'access_token': token}
         response = requests.post(url, data=payload)
         resultado = response.json()
-        
         if response.status_code == 200:
             return True, "¡Publicación enviada con éxito a Facebook! 🚀"
         else:
-            error_msg = resultado.get('error', {}).get('message', 'Error desconocido en la API de Meta')
-            return False, f"Error al publicar: {error_msg}"
-            
+            return False, f"Error: {resultado.get('error', {}).get('message', 'Desconocido')}"
     except Exception as e:
-        return False, f"Fallo crítico en la conexión con Meta: {str(e)}"
+        return False, f"Fallo crítico: {str(e)}"
 
 # ==========================================
 # --- AUTOMATIZACIÓN DESDE AIRTABLE ---
@@ -236,38 +210,29 @@ if not df_eventos.empty:
     evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_eventos["opcion_menu"])
     fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
 
-    tipo_evento = str(fila.get("evento", ""))
-    lugar_evento = str(fila.get("lugar", ""))
-    autor_evento = str(fila.get("Autor", ""))
-    
-    # Extracción de la URL si el campo es de tipo "Archivos adjuntos" (Attachment) en Airtable
     cartel_raw = fila.get("cartel_url", "")
+    st.write("Valor crudo recibido de Airtable en cartel_url:", repr(cartel_raw))
+    
     url_imagen_db = ""
     if isinstance(cartel_raw, list) and len(cartel_raw) > 0:
         url_imagen_db = cartel_raw[0].get("url", "")
     elif isinstance(cartel_raw, str) and cartel_raw.startswith("http"):
         url_imagen_db = cartel_raw
 
-    texto_autor = f" con {autor_evento}" if autor_evento and autor_evento.lower() != "autor pendiente" and autor_evento != "nan" else ""
-    mensaje_auto = f"¡No te pierdas nuestro próximo evento! 📖✨ Tendremos '{tipo_evento}'{texto_autor} en {lugar_evento} con Atlántida Distribuciones. ¡Te esperamos!"
+    tipo_evento = str(fila.get("evento", ""))
+    mensaje_auto = f"¡No te pierdas nuestro evento! '{tipo_evento}' en {fila.get('lugar', '')} con Atlántida Distribuciones."
 
     st.text_area("Mensaje que se publicará:", mensaje_auto, height=100)
 
     if url_imagen_db:
-        try:
-            st.image(url_imagen_db, width=300, caption="Cartel asociado")
-        except Exception:
-            st.info("ℹ️ Imagen cargada desde adjunto de Airtable.")
+        st.image(url_imagen_db, width=300)
     else:
-        st.warning("Este evento no tiene ningún archivo de cartel adjunto en Airtable.")
+        st.warning("No se ha podido extraer una URL de imagen válida del campo.")
 
-    if st.button("🚀 Publicar este Evento de Airtable"):
+    if st.button("🚀 Publicar en Facebook"):
         if not url_imagen_db:
-            st.error("Falta la imagen adjunta para poder publicar.")
+            st.error("Falta imagen.")
         else:
-            with st.spinner("Enviando a Facebook..."):
-                exito, mensaje = publicar_en_facebook(mensaje_auto, url_imagen_db)
-                if exito: st.success(mensaje)
-                else: st.error(mensaje)
-else:
-    st.info("No hay eventos disponibles.")
+            exito, mensaje = publicar_en_facebook(mensaje_auto, url_imagen_db)
+            if exito: st.success(mensaje)
+            else: st.error(mensaje)
