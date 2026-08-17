@@ -252,7 +252,7 @@ fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
 tipo_evento = str(fila.get("evento", ""))
 lugar_evento = str(fila.get("lugar", ""))
 autor_evento = str(fila.get("Autor", ""))
-url_imagen_db = str(fila.get("Cartel", fila.get("cartel_url", "")))
+url_imagen_db = str(fila.get("cartel_url", ""))
 
 # Si es un enlace de Google Drive, convertirlo automáticamente a descarga directa
 if "drive.google.com" in url_imagen_db and "/file/d/" in url_imagen_db:
