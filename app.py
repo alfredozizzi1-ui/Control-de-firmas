@@ -12,21 +12,48 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📚 Control de Firmas y Difusión de Eventos")
+st.title("📚 Control de Firmas y Gestor de Eventos")
 
 # ==========================================
-# 2. CONEXIÓN A AIRTABLE (Secrets)
+# 2. CONEXIÓN A AIRTABLE (3 TABLAS)
 # ==========================================
 try:
     AIRTABLE_API_KEY = st.secrets["airtable"]["api_key"].strip()
     BASE_ID = st.secrets["airtable"]["base_id"].strip()
-    TABLE_NAME = st.secrets["airtable"]["table_name"].strip()
     
     api = Api(AIRTABLE_API_KEY)
-    table_eventos = api.table(BASE_ID, TABLE_NAME)
+    table_eventos = api.table(BASE_ID, "eventos")
+    table_autores = api.table(BASE_ID, "autores")
+    table_librerias = api.table(BASE_ID, "librerias")
 except Exception as e:
-    st.error(f"Error cargando credenciales de Airtable: {e}")
+    st.error(f"Error al conectar con Airtable. Revisa tus Secrets: {e}")
     st.stop()
+
+# Cargar listas auxiliares de Autores y Librerías
+@st.cache_data(ttl=60)
+def cargar_autores_y_librerias():
+    lista_autores, lista_librerias = [], []
+    try:
+        rec_autores = table_autores.all()
+        for r in rec_autores:
+            nombre = r['fields'].get('nombre') or r['fields'].get('autor') or r['fields'].get('Nombre')
+            if nombre:
+                lista_autores.append(nombre)
+    except Exception:
+        pass
+
+    try:
+        rec_librerias = table_librerias.all()
+        for r in rec_librerias:
+            nombre = r['fields'].get('nombre') or r['fields'].get('libreria') or r['fields'].get('Lugar')
+            if nombre:
+                lista_librerias.append(nombre)
+    except Exception:
+        pass
+
+    return sorted(lista_autores), sorted(lista_librerias)
+
+autores_list, librerias_list = cargar_autores_y_librerias()
 
 # ==========================================
 # 3. FUNCIONES DE PUBLICACIÓN EN REDES
@@ -102,7 +129,7 @@ def publicar_en_instagram(mensaje, imagen_url):
 
 
 # ==========================================
-# 4. CARGA DE REGISTROS DESDE AIRTABLE
+# 4. CARGA DE EVENTOS Y PESTAÑAS
 # ==========================================
 
 records = table_eventos.all()
@@ -116,150 +143,214 @@ if records:
         
     df = pd.DataFrame(raw_data)
 
-    # Definir pestañas del panel de control
-    tab1, tab2, tab3 = st.tabs([
-        "📊 Control de Firmas y Eventos", 
-        "📢 Generador y Difusión en Redes", 
-        "➕ Registrar Nuevo Evento"
+    tab_general, tab_editar, tab_difusion, tab_nuevo = st.tabs([
+        "📋 Registro de Eventos", 
+        "✏️ Editar / Eliminar Evento", 
+        "📢 Publicación en Redes", 
+        "➕ Añadir Evento"
     ])
 
     # ------------------------------------------
-    # PESTAÑA 1: TABLA Y FILTROS DE FIRMAS
+    # PESTAÑA 1: LISTADO GENERAL
     # ------------------------------------------
-    with tab1:
-        st.subheader("Listado general de eventos y firmas")
+    with tab_general:
+        st.subheader("Filtros y Consulta General")
         
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            if 'lugar' in df.columns:
-                lugares = ["Todos"] + [x for x in df['lugar'].dropna().unique() if str(x).strip() != '']
-                lugar_sel = st.selectbox("Filtrar por librería/lugar:", lugares)
-            else:
-                lugar_sel = "Todos"
-                
-        with col_f2:
-            if 'confirmado' in df.columns:
-                estado_sel = st.selectbox("Estado de confirmación:", ["Todos", "Confirmados", "Pendientes"])
-            else:
-                estado_sel = "Todos"
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            lugares_opts = ["Todos"] + (librerias_list if librerias_list else list(df['lugar'].dropna().unique()) if 'lugar' in df.columns else [])
+            lugar_filtro = st.selectbox("Filtrar por librería/lugar:", lugares_opts)
+        with c2:
+            autores_opts = ["Todos"] + (autores_list if autores_list else list(df['autor'].dropna().unique()) if 'autor' in df.columns else [])
+            autor_filtro = st.selectbox("Filtrar por autor/a:", autores_opts)
+        with c3:
+            confirmado_filtro = st.selectbox("Estado de confirmación:", ["Todos", "Confirmados", "Pendientes"])
 
-        df_filtrado = df.copy()
-        if lugar_sel != "Todos":
-            df_filtrado = df_filtrado[df_filtrado['lugar'] == lugar_sel]
-            
-        if estado_sel == "Confirmados" and 'confirmado' in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado['confirmado'] == True]
-        elif estado_sel == "Pendientes" and 'confirmado' in df_filtrado.columns:
-            df_filtrado = df_filtrado[df_filtrado['confirmado'] != True]
+        df_disp = df.copy()
+        if lugar_filtro != "Todos" and 'lugar' in df_disp.columns:
+            df_disp = df_disp[df_disp['lugar'] == lugar_filtro]
+        if autor_filtro != "Todos" and 'autor' in df_disp.columns:
+            df_disp = df_disp[df_disp['autor'] == autor_filtro]
+        if confirmado_filtro == "Confirmados" and 'confirmado' in df_disp.columns:
+            df_disp = df_disp[df_disp['confirmado'] == True]
+        elif confirmado_filtro == "Pendientes" and 'confirmado' in df_disp.columns:
+            df_disp = df_disp[df_disp['confirmado'] != True]
 
-        # Ocultar campos internos de la tabla técnica
-        cols_mostrar = [c for c in df_filtrado.columns if c != 'record_id']
-        st.dataframe(df_filtrado[cols_mostrar], use_container_width=True)
+        columnas_visibles = [c for c in df_disp.columns if c != 'record_id']
+        st.dataframe(df_disp[columnas_visibles], use_container_width=True)
 
     # ------------------------------------------
-    # PESTAÑA 2: GENERADOR DE TEXTOS Y REDES
+    # PESTAÑA 2: EDITAR / ELIMINAR EVENTOS
     # ------------------------------------------
-    with tab2:
-        st.subheader("Generación de Texto de Difusión y Publicación")
+    with tab_editar:
+        st.subheader("Editar datos de un evento existente")
+        
+        eventos_list = df['evento'].dropna().tolist() if 'evento' in df.columns else []
+        if eventos_list:
+            evento_ed_sel = st.selectbox("Selecciona evento a modificar:", eventos_list, key="sel_edit")
+            fila_ed = df[df['evento'] == evento_ed_sel].iloc[0]
+            rec_id = fila_ed['record_id']
+
+            with st.form("form_editar_evento"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    e_evento = st.text_input("Nombre del evento:", value=str(fila_ed.get('evento', '')))
+                    
+                    # Cargar autor actual o selector desde lista
+                    val_autor = str(fila_ed.get('autor', ''))
+                    if autores_list:
+                        idx_aut = autores_list.index(val_autor) if val_autor in autores_list else 0
+                        e_autor = st.selectbox("Autor/a:", autores_list, index=idx_aut)
+                    else:
+                        e_autor = st.text_input("Autor/a:", value=val_autor)
+
+                    # Cargar librería actual o selector desde lista
+                    val_lugar = str(fila_ed.get('lugar', ''))
+                    if librerias_list:
+                        idx_lug = librerias_list.index(val_lugar) if val_lugar in librerias_list else 0
+                        e_lugar = st.selectbox("Librería / Lugar:", librerias_list, index=idx_lug)
+                    else:
+                        e_lugar = st.text_input("Librería / Lugar:", value=val_lugar)
+
+                with col2:
+                    e_cartel = st.text_input("URL del cartel (HTTP/HTTPS):", value=str(fila_ed.get('cartel_url', '')))
+                    e_confirmado = st.checkbox("Confirmado", value=bool(fila_ed.get('confirmado', True)))
+                    e_difusion = st.text_area("Texto de difusión:", value=str(fila_ed.get('difusion', '')), height=100)
+
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    guardar_edit = st.form_submit_button("💾 Guardar Cambios")
+                with col_btn2:
+                    eliminar_edit = st.form_submit_button("🗑️ Eliminar Evento")
+
+                if guardar_edit:
+                    payload_edit = {
+                        "evento": e_evento,
+                        "autor": e_autor,
+                        "lugar": e_lugar,
+                        "cartel_url": e_cartel,
+                        "confirmado": e_confirmado,
+                        "difusion": e_difusion
+                    }
+                    try:
+                        table_eventos.update(rec_id, payload_edit)
+                        st.success("¡Evento actualizado correctamente! Actualiza la página.")
+                        st.cache_data.clear()
+                    except Exception as err:
+                        st.error(f"Error al actualizar: {err}")
+
+                if eliminar_edit:
+                    try:
+                        table_eventos.delete(rec_id)
+                        st.warning("Evento eliminado de Airtable. Actualiza la página.")
+                        st.cache_data.clear()
+                    except Exception as err:
+                        st.error(f"Error al eliminar: {err}")
+
+    # ------------------------------------------
+    # PESTAÑA 3: PUBLICACIÓN EN REDES (FB + IG)
+    # ------------------------------------------
+    with tab_difusion:
+        st.subheader("Gestor de Difusión y Redes Sociales")
         
         if 'evento' in df.columns:
-            eventos_disponibles = df['evento'].dropna().tolist()
-            evento_elegido = st.selectbox("Selecciona la firma/evento a promocionar:", eventos_disponibles)
-            
-            fila_evento = df[df['evento'] == evento_elegido].iloc[0]
-            
-            lugar_evt = fila_evento.get('lugar', 'Librería')
-            cartel_url_evt = fila_evento.get('cartel_url', '')
+            evento_sel = st.selectbox("Selecciona un evento para publicar:", df['evento'].dropna().tolist(), key="sel_dif")
+            fila = df[df['evento'] == evento_sel].iloc[0]
 
-            # Texto por defecto o personalizado
-            texto_base = fila_evento.get('difusion', '')
-            if not texto_base or pd.isna(texto_base):
-                texto_base = f"¡No te pierdas nuestro nuevo evento! 📖✨\n\n{evento_elegido} en {lugar_evt}.\n\n¡Te esperamos para compartir una jornada literaria inolvidable! ✍️📚"
+            mensaje_difusion = fila.get('difusion', f"¡No te pierdas nuestro nuevo evento {evento_sel}!")
+            cartel_url = fila.get('cartel_url', '')
 
-            col_izq, col_der = st.columns([1, 1])
+            st.write("---")
+            st.markdown("### Vista previa del post")
+            mensaje_editado = st.text_area("Texto a publicar:", value=mensaje_difusion, height=120)
 
-            with col_izq:
-                st.markdown("#### Mensaje a publicar")
-                mensaje_final = st.text_area("Edita el texto antes de enviar:", value=texto_base, height=200)
-                
-            with col_der:
-                st.markdown("#### Cartel del evento")
-                if cartel_url_evt and str(cartel_url_evt).startswith("http"):
-                    st.image(cartel_url_evt, caption="Cartel de Airtable", width=300)
-                else:
-                    st.info("Este evento no tiene URL de cartel asignada en Airtable.")
-                
-                archivo_subido = st.file_uploader("Sustituir cartel con una imagen local:", type=["jpg", "png", "jpeg"])
-                if archivo_subido is not None:
-                    st.image(archivo_subido, caption="Cartel local cargado", width=300)
+            cartel_final = cartel_url
+            if cartel_url and str(cartel_url).startswith("http"):
+                st.image(cartel_url, caption="Cartel desde Airtable", width=320)
+            else:
+                st.info("No hay URL de cartel en Airtable para este evento.")
 
-            st.divider()
-            
-            # Botones de envío
-            c_fb, c_ig = st.columns(2)
+            uploaded_file = st.file_uploader("O sube/reemplaza el cartel localmente:", type=["jpg", "png", "jpeg"])
+            if uploaded_file is not None:
+                st.image(uploaded_file, caption="Nuevo cartel cargado", width=320)
 
-            with c_fb:
+            st.write("---")
+
+            col_fb, col_ig = st.columns(2)
+
+            with col_fb:
                 if st.button("🚀 Publicar en Facebook", use_container_width=True):
-                    with st.spinner("Enviando publicación a Facebook..."):
-                        target = archivo_subido if archivo_subido is not None else cartel_url_evt
-                        exito, msg = publicar_en_facebook(mensaje_final, target)
+                    with st.spinner("Publicando en Facebook..."):
+                        target_img = uploaded_file if uploaded_file is not None else cartel_final
+                        exito, msg = publicar_en_facebook(mensaje_editado, target_img)
                         if exito:
                             st.success(msg)
                         else:
                             st.error(msg)
 
-            with c_ig:
+            with col_ig:
                 if st.button("📸 Publicar en Instagram", use_container_width=True):
-                    with st.spinner("Enviando publicación a Instagram..."):
-                        if archivo_subido is not None:
-                            st.warning("Para publicar en Instagram necesitas una URL HTTP/HTTPS pública. Añade la URL del cartel a la columna cartel_url de Airtable.")
+                    with st.spinner("Publicando en Instagram..."):
+                        if uploaded_file is not None:
+                            st.warning("Instagram requiere una URL pública en HTTP/HTTPS para publicar imágenes. Asegúrate de incluir la dirección en la columna cartel_url.")
                         else:
-                            exito, msg = publicar_en_instagram(mensaje_final, cartel_url_evt)
+                            exito, msg = publicar_en_instagram(mensaje_editado, cartel_final)
                             if exito:
                                 st.success(msg)
                             else:
                                 st.error(msg)
 
     # ------------------------------------------
-    # PESTAÑA 3: FORMULARIO DE NUEVO REGISTRO
+    # PESTAÑA 4: FORMULARIO PARA AÑADIR REGISTROS
     # ------------------------------------------
-    with tab3:
+    with tab_nuevo:
         st.subheader("Registrar nuevo evento o firma")
         
-        with st.form("nuevo_evento_form", clear_on_submit=True):
+        with st.form("form_nuevo_evento", clear_on_submit=True):
             col_a, col_b = st.columns(2)
             with col_a:
-                nom_evt = st.text_input("Nombre del evento / Libro:")
-                id_evt = st.text_input("ID o Código:")
-                url_cartel = st.text_input("URL pública del cartel (HTTP/HTTPS):")
+                nuevo_evento = st.text_input("Nombre del evento / Libro:")
+                
+                # Selector de Autores desde Airtable
+                if autores_list:
+                    nuevo_autor = st.selectbox("Autor/a:", autores_list)
+                else:
+                    nuevo_autor = st.text_input("Autor/a:")
+
+                # Selector de Librerías desde Airtable
+                if librerias_list:
+                    nuevo_lugar = st.selectbox("Librería / Lugar:", librerias_list)
+                else:
+                    nuevo_lugar = st.text_input("Librería / Lugar:")
+
             with col_b:
-                lug_evt = st.text_input("Librería / Lugar:")
-                conf_evt = st.checkbox("Evento confirmado", value=True)
-                txt_dif = st.text_area("Texto personalizado de difusión (opcional):")
+                nuevo_cartel_url = st.text_input("URL del cartel (HTTP/HTTPS):")
+                nuevo_confirmado = st.checkbox("Confirmado", value=True)
+                nuevo_difusion = st.text_area("Texto de difusión (opcional):")
 
-            guardar = st.form_submit_button("💾 Guardar evento en Airtable")
+            submit = st.form_submit_button("💾 Guardar en Airtable")
 
-            if guardar:
-                if nom_evt and lug_evt:
-                    datos_nuevo = {
-                        "evento": nom_evt,
-                        "lugar": lug_evt,
-                        "confirmado": conf_evt
+            if submit:
+                if nuevo_evento and nuevo_lugar:
+                    payload = {
+                        "evento": nuevo_evento,
+                        "autor": nuevo_autor,
+                        "lugar": nuevo_lugar,
+                        "confirmado": nuevo_confirmado
                     }
-                    if id_evt:
-                        datos_nuevo["id"] = id_evt
-                    if url_cartel:
-                        datos_nuevo["cartel_url"] = url_cartel
-                    if txt_dif:
-                        datos_nuevo["difusion"] = txt_dif
+                    if nuevo_cartel_url:
+                        payload["cartel_url"] = nuevo_cartel_url
+                    if nuevo_difusion:
+                        payload["difusion"] = nuevo_difusion
 
                     try:
-                        table_eventos.create(datos_nuevo)
-                        st.success("¡Evento guardado con éxito! Recarga la página para actualizar la lista.")
-                    except Exception as err:
-                        st.error(f"No se pudo guardar en Airtable: {err}")
+                        table_eventos.create(payload)
+                        st.success("¡Evento guardado con éxito en Airtable!")
+                        st.cache_data.clear()
+                    except Exception as e:
+                        st.error(f"Error al guardar en Airtable: {str(e)}")
                 else:
-                    st.error("Debes rellenar al menos el nombre del evento y el lugar.")
+                    st.error("Por favor, completa los campos requeridos.")
 
 else:
-    st.warning("No se encontraron registros en Airtable. Comprueba el nombre de la tabla en Secrets.")
+    st.warning("No se encontraron registros en la tabla de Airtable.")
