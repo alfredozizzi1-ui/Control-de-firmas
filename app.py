@@ -15,16 +15,15 @@ st.caption("Gestión interna sincronizada mediante API directa con Airtable.")
 if not os.path.exists("carteles"):
     os.makedirs("carteles")
 
-# --- FUNCIÓN AUXILIAR MEJORADA PARA EXTRAER URL PÚBLICA DE AIRTABLE ---
+# --- FUNCIÓN AUXILIAR PARA EXTRAER URL PÚBLICA DE ATTACHMENTS DE AIRTABLE ---
 def extraer_url_cartel(val):
-    """ Extrae una URL pública de la columna cartel_url de Airtable (soporta texto o adjuntos de Airtable) """
-    if isinstance(val, str):
-        return val.strip()
-    elif isinstance(val, list) and len(val) > 0:
+    """ Extrae la URL pública de la columna cartel_url (soporta formato Adjunto de Airtable) """
+    if isinstance(val, list) and len(val) > 0:
         primer_item = val[0]
         if isinstance(primer_item, dict):
-            # Obtener URL directa del archivo adjunto en Airtable
             return primer_item.get("url", "")
+    elif isinstance(val, str) and val.startswith("http"):
+        return val.strip()
     return ""
 
 # --- CONFIGURACIÓN EMAIL ---
@@ -118,7 +117,6 @@ with tab1:
             df_display["fecha"] = df_display["fecha_dt"].dt.strftime("%d-%m-%Y")
             df_display = df_display.drop(columns=["fecha_dt"])
         
-        # Limpiar la columna cartel_url para mostrar la URL limpia en la tabla
         if "cartel_url" in df_display.columns:
             df_display["cartel_url"] = df_display["cartel_url"].apply(extraer_url_cartel)
 
@@ -143,7 +141,7 @@ with tab2:
         hora_fin = col_f3.time_input("Fin", value=time(19, 30))
         evento = st.text_input("Evento")
         anotaciones_evento = st.text_area("Anotaciones")
-        cartel_file = st.file_uploader("Sube la imagen del cartel (para guardar en local)", type=["jpg", "jpeg", "png"])
+        cartel_file = st.file_uploader("Sube la imagen del cartel", type=["jpg", "jpeg", "png"])
         confirmado = st.checkbox("¿Evento confirmado?")
 
         if st.form_submit_button("Guardar Evento"):
@@ -155,8 +153,20 @@ with tab2:
                     cartel_path = os.path.join("carteles", cartel_file.name)
                     with open(cartel_path, "wb") as f:
                         f.write(cartel_file.getbuffer())
+
                 nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns else 1
-                record = {"id": str(nuevo_id), "Autor": autor_final, "fecha": str(fecha_sel), "hora_inicio": hora_inicio.strftime("%H:%M"), "hora_fin": hora_fin.strftime("%H:%M"), "lugar": libreria_final, "evento": evento, "anotaciones": anotaciones_evento, "cartel_url": cartel_path, "confirmado": bool(confirmado)}
+                record = {
+                    "id": str(nuevo_id), 
+                    "Autor": autor_final, 
+                    "fecha": str(fecha_sel), 
+                    "hora_inicio": hora_inicio.strftime("%H:%M"), 
+                    "hora_fin": hora_fin.strftime("%H:%M"), 
+                    "lugar": libreria_final, 
+                    "evento": evento, 
+                    "anotaciones": anotaciones_evento, 
+                    "confirmado": bool(confirmado)
+                }
+                
                 if guardar_dato("eventos", record):
                     st.success("¡Evento guardado!"); st.rerun()
 
@@ -173,7 +183,7 @@ with tab3:
             edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
             edit_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
             edit_fecha = st.date_input("Fecha", value=pd.to_datetime(fila.get("fecha")).date())
-            edit_cartel_file = st.file_uploader("Cambiar imagen del cartel (para guardar en local)", type=["jpg", "jpeg", "png"])
+            edit_cartel_file = st.file_uploader("Cambiar imagen del cartel", type=["jpg", "jpeg", "png"])
             
             col_h1, col_h2 = st.columns(2)
             try: h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
@@ -199,12 +209,6 @@ with tab3:
                     "evento": edit_evento_desc,
                     "anotaciones": edit_anotaciones
                 }
-                
-                if edit_cartel_file is not None:
-                    cartel_path = os.path.join("carteles", edit_cartel_file.name)
-                    with open(cartel_path, "wb") as f:
-                        f.write(edit_cartel_file.getbuffer())
-                    datos_actualizacion["cartel_url"] = cartel_path
 
                 if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                     st.success("¡Actualizado!"); st.rerun()
@@ -282,7 +286,7 @@ def publicar_en_instagram(mensaje, imagen_url):
         token = st.secrets["meta"]["page_access_token"].strip()
         
         if not str(imagen_url).startswith("http"):
-            return False, "Instagram requiere una URL pública de la imagen (HTTP/HTTPS). Adjunta la imagen en la celda 'cartel_url' de Airtable o pon un enlace directo."
+            return False, "Instagram requiere una URL pública de la imagen (HTTP/HTTPS). Adjunta la imagen a la celda 'cartel_url' en Airtable."
 
         # Paso 1: Crear contenedor multimedia
         url_container = f"https://graph.facebook.com/v18.0/{ig_account_id}/media"
@@ -330,7 +334,6 @@ if not df_eventos.empty:
     evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_eventos["opcion_menu"])
     fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
 
-    # Preparar datos para el texto
     autor_v = str(fila.get('Autor', ''))
     lugar_v = str(fila.get('lugar', ''))
     evento_v = str(fila.get('evento', ''))
@@ -349,7 +352,7 @@ if not df_eventos.empty:
 
     st.text_area("Mensaje que se publicará:", mensaje_auto, height=150)
 
-    # Extraer la imagen correctamente (soporta adjuntos de Airtable y URLs públicas)
+    # Extraer la URL pública generada por el adjunto de Airtable
     cartel_val = fila.get("cartel_url", "")
     imagen_final = extraer_url_cartel(cartel_val)
 
