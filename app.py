@@ -178,9 +178,41 @@ with tab3:
                     st.success("¡Actualizado!"); st.rerun()
 
 with tab4:
-    st.header("Autores"); st.dataframe(df_autores, use_container_width=True)
+    st.header("👤 Autores")
+    with st.form("form_nuevo_autor", clear_on_submit=True):
+        nuevo_autor_nombre = st.text_input("Nombre y Apellidos del Autor")
+        nuevo_autor_email = st.text_input("Correo electrónico (Opcional)")
+        if st.form_submit_button("➕ Guardar Autor"):
+            if not nuevo_autor_nombre.strip():
+                st.error("El nombre del autor es obligatorio.")
+            else:
+                record = {"Nombre": nuevo_autor_nombre.strip(), "Email": nuevo_autor_email.strip()}
+                if guardar_dato("autores", record):
+                    st.success(f"¡Autor '{nuevo_autor_nombre}' guardado correctamente!")
+                    st.rerun()
+                else:
+                    st.error("Error al guardar en Airtable.")
+    st.markdown("---")
+    st.dataframe(df_autores, use_container_width=True, hide_index=True)
+
 with tab5:
-    st.header("Librerías"); st.dataframe(df_librerias, use_container_width=True)
+    st.header("🏛️ Librerías")
+    with st.form("form_nueva_libreria", clear_on_submit=True):
+        nueva_lib_nombre = st.text_input("Nombre de la Librería / Punto de venta")
+        nueva_lib_direccion = st.text_input("Dirección / Municipio (Opcional)")
+        if st.form_submit_button("➕ Guardar Librería"):
+            if not nueva_lib_nombre.strip():
+                st.error("El nombre de la librería es obligatorio.")
+            else:
+                record = {"Nombre": nueva_lib_nombre.strip(), "Direccion": nueva_lib_direccion.strip()}
+                if guardar_dato("librerias", record):
+                    st.success(f"¡Librería '{nueva_lib_nombre}' guardada correctamente!")
+                    st.rerun()
+                else:
+                    st.error("Error al guardar en Airtable.")
+    st.markdown("---")
+    st.dataframe(df_librerias, use_container_width=True, hide_index=True)
+
 with tab6:
     st.header("Bloc General"); st.text_area("Notas", height=300)
 
