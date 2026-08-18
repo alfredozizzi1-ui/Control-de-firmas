@@ -171,9 +171,26 @@ with tab3:
                 edit_hora_fin = st.time_input("Hora de Fin", value=h_fin_val)
             
             edit_evento_desc = st.text_input("Evento", value=fila.get("evento", ""))
+            edit_anotaciones = st.text_area("Anotaciones", value=fila.get("anotaciones", ""))
             
             if st.form_submit_button("Guardar Cambios"):
-                datos_actualizacion = {"Autor": edit_autor, "lugar": edit_lugar, "fecha": str(edit_fecha), "hora_inicio": edit_hora_inicio.strftime("%H:%M"), "hora_fin": edit_hora_fin.strftime("%H:%M"), "evento": edit_evento_desc}
+                datos_actualizacion = {
+                    "Autor": edit_autor, 
+                    "lugar": edit_lugar, 
+                    "fecha": str(edit_fecha), 
+                    "hora_inicio": edit_hora_inicio.strftime("%H:%M"), 
+                    "hora_fin": edit_hora_fin.strftime("%H:%M"), 
+                    "evento": edit_evento_desc,
+                    "anotaciones": edit_anotaciones
+                }
+                
+                # Si se sube una nueva imagen en editar, actualizamos la ruta
+                if edit_cartel_file is not None:
+                    cartel_path = os.path.join("carteles", edit_cartel_file.name)
+                    with open(cartel_path, "wb") as f:
+                        f.write(edit_cartel_file.getbuffer())
+                    datos_actualizacion["cartel_url"] = cartel_path
+
                 if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                     st.success("¡Actualizado!"); st.rerun()
 
