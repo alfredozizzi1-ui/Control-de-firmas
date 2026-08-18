@@ -4,29 +4,55 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, time, date
-import re
 import os
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
 st.caption("Gestión interna sincronizada mediante API directa con Airtable.")
 
-# Crear carpeta local para guardar los carteles subidos si no existe
 if not os.path.exists("carteles"):
     os.makedirs("carteles")
 
-# --- FUNCIÓN AUXILIAR PARA EXTRAER URL PÚBLICA DE ATTACHMENTS DE AIRTABLE ---
+# ==========================================
+# --- FUNCIÓN DE SUBIDA A CLOUDINARY (100% GRATIS) ---
+# ==========================================
+def subir_a_cloudinary(archivo_file_o_ruta):
+    """ Suba una imagen a Cloudinary (gratis) y devuelve la URL pública directa """
+    try:
+        cloud_name = st.secrets["cloudinary"]["cloud_name"].strip()
+        upload_preset = st.secrets["cloudinary"]["upload_preset"].strip()
+        url = f"https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
+
+        if isinstance(archivo_file_o_ruta, str) and os.path.exists(archivo_file_o_ruta):
+            with open(archivo_file_o_ruta, "rb") as file_data:
+                payload = {"upload_preset": upload_preset}
+                files = {"file": file_data}
+                res = requests.post(url, data=payload, files=files)
+        else:
+            payload = {"upload_preset": upload_preset}
+            files = {"file": archivo_file_o_ruta.getvalue()}
+            res = requests.post(url, data=payload, files=files)
+
+        data = res.json()
+        if res.status_code == 200 and "secure_url" in data:
+            return data["secure_url"]
+        else:
+            st.error(f"Error en Cloudinary: {data.get('error', {}).get('message', 'Error desconocido')}")
+            return ""
+    except Exception as e:
+        st.error(f"Error conectando con Cloudinary: {e}")
+        return ""
+
 def extraer_url_cartel(val):
-    """ Extrae la URL pública de la columna cartel_url (soporta formato Adjunto de Airtable) """
+    """ Extrae la URL de la columna cartel_url (soporta adjuntos o enlaces texto) """
     if isinstance(val, list) and len(val) > 0:
         primer_item = val[0]
         if isinstance(primer_item, dict):
             return primer_item.get("url", "")
-    elif isinstance(val, str) and val.startswith("http"):
+    elif isinstance(val, str):
         return val.strip()
     return ""
 
-# --- CONFIGURACIÓN EMAIL ---
 def enviar_email(destinatario, asunto, cuerpo):
     try:
         msg = MIMEText(cuerpo)
@@ -94,7 +120,6 @@ def actualizar_dato(nombre_tabla, record_id, datos):
     except Exception:
         return False
 
-# Cargar datos
 df_eventos = cargar_datos("eventos")
 df_autores = cargar_datos("autores")
 df_librerias = cargar_datos("librerias")
@@ -148,11 +173,10 @@ with tab2:
             if not autor_final or not libreria_final: 
                 st.error("Completa Autor y Librería.")
             else:
-                cartel_path = ""
+                cartel_url_subida = ""
                 if cartel_file is not None:
-                    cartel_path = os.path.join("carteles", cartel_file.name)
-                    with open(cartel_path, "wb") as f:
-                        f.write(cartel_file.getbuffer())
+                    with st.spinner("Subiendo cartel a servidor público..."):
+                        cartel_url_subida = subir_a_cloudinary(cartel_file)
 
                 nuevo_id = int(pd.to_numeric(df_eventos["id"], errors='coerce').max() + 1) if not df_eventos.empty and "id" in df_eventos.columns else 1
                 record = {
@@ -166,9 +190,11 @@ with tab2:
                     "anotaciones": anotaciones_evento, 
                     "confirmado": bool(confirmado)
                 }
-                
+                if cartel_url_subida:
+                    record["cartel_url"] = cartel_url_subida
+
                 if guardar_dato("eventos", record):
-                    st.success("¡Evento guardado!"); st.rerun()
+                    st.success("¡Evento guardado con imagen pública!"); st.rerun()
 
 with tab3:
     st.header("Modificar Evento")
@@ -210,8 +236,14 @@ with tab3:
                     "anotaciones": edit_anotaciones
                 }
 
+                if edit_cartel_file is not None:
+                    with st.spinner("Subiendo nuevo cartel..."):
+                        nueva_url = subir_a_cloudinary(edit_cartel_file)
+                        if nueva_url:
+                            datos_actualizacion["cartel_url"] = nueva_url
+
                 if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
-                    st.success("¡Actualizado!"); st.rerun()
+                    st.success("¡Evento e imagen actualizados en Airtable!"); st.rerun()
 
 with tab4:
     st.header("👤 Autores")
@@ -262,14 +294,8 @@ def publicar_en_facebook(mensaje, imagen_path_o_url):
         token = st.secrets["meta"]["page_access_token"].strip()
         url = f"https://graph.facebook.com/v18.0/{page_id}/photos"
         
-        if os.path.exists(str(imagen_path_o_url)):
-            with open(imagen_path_o_url, 'rb') as img_file:
-                files = {'source': img_file}
-                payload = {'message': mensaje, 'access_token': token}
-                response = requests.post(url, data=payload, files=files)
-        else:
-            payload = {'url': imagen_path_o_url, 'caption': mensaje, 'access_token': token}
-            response = requests.post(url, data=payload)
+        payload = {'url': imagen_path_o_url, 'caption': mensaje, 'access_token': token}
+        response = requests.post(url, data=payload)
             
         resultado = response.json()
         if response.status_code == 200:
@@ -286,9 +312,8 @@ def publicar_en_instagram(mensaje, imagen_url):
         token = st.secrets["meta"]["page_access_token"].strip()
         
         if not str(imagen_url).startswith("http"):
-            return False, "Instagram requiere una URL pública de la imagen (HTTP/HTTPS). Adjunta la imagen a la celda 'cartel_url' en Airtable."
+            return False, "Instagram requiere una URL pública de la imagen (HTTP/HTTPS). Vuelve a editar el evento y sube la imagen de nuevo."
 
-        # Paso 1: Crear contenedor multimedia
         url_container = f"https://graph.facebook.com/v18.0/{ig_account_id}/media"
         payload_container = {
             'image_url': imagen_url,
@@ -304,7 +329,6 @@ def publicar_en_instagram(mensaje, imagen_url):
 
         creation_id = data_container.get("id")
 
-        # Paso 2: Publicar contenedor
         url_publish = f"https://graph.facebook.com/v18.0/{ig_account_id}/media_publish"
         payload_publish = {
             'creation_id': creation_id,
@@ -352,16 +376,15 @@ if not df_eventos.empty:
 
     st.text_area("Mensaje que se publicará:", mensaje_auto, height=150)
 
-    # Extraer la URL pública generada por el adjunto de Airtable
     cartel_val = fila.get("cartel_url", "")
     imagen_final = extraer_url_cartel(cartel_val)
 
     archivo_subido_extra = st.file_uploader("O sube/cambia el cartel localmente aquí:", type=["jpg", "jpeg", "png"], key="extra_subida")
     if archivo_subido_extra is not None:
-        temp_path = os.path.join("carteles", archivo_subido_extra.name)
-        with open(temp_path, "wb") as f: 
-            f.write(archivo_subido_extra.getbuffer())
-        imagen_final = temp_path
+        with st.spinner("Subiendo cartel público..."):
+            url_temp = subir_a_cloudinary(archivo_subido_extra)
+            if url_temp:
+                imagen_final = url_temp
 
     if imagen_final: 
         st.image(imagen_final, width=300)
