@@ -15,14 +15,15 @@ st.caption("Gestión interna sincronizada mediante API directa con Airtable.")
 if not os.path.exists("carteles"):
     os.makedirs("carteles")
 
-# --- FUNCIÓN AUXILIAR PARA PARSEAR CARTEL_URL DE AIRTABLE ---
+# --- FUNCIÓN AUXILIAR MEJORADA PARA EXTRAER URL PÚBLICA DE AIRTABLE ---
 def extraer_url_cartel(val):
-    """ Extrae una ruta o URL utilizable de la columna cartel_url de Airtable """
+    """ Extrae una URL pública de la columna cartel_url de Airtable (soporta texto o adjuntos de Airtable) """
     if isinstance(val, str):
-        return val
+        return val.strip()
     elif isinstance(val, list) and len(val) > 0:
         primer_item = val[0]
         if isinstance(primer_item, dict):
+            # Obtener URL directa del archivo adjunto en Airtable
             return primer_item.get("url", "")
     return ""
 
@@ -117,7 +118,7 @@ with tab1:
             df_display["fecha"] = df_display["fecha_dt"].dt.strftime("%d-%m-%Y")
             df_display = df_display.drop(columns=["fecha_dt"])
         
-        # Limpiar la columna cartel_url para evitar [object Object] en la tabla
+        # Limpiar la columna cartel_url para mostrar la URL limpia en la tabla
         if "cartel_url" in df_display.columns:
             df_display["cartel_url"] = df_display["cartel_url"].apply(extraer_url_cartel)
 
@@ -142,7 +143,7 @@ with tab2:
         hora_fin = col_f3.time_input("Fin", value=time(19, 30))
         evento = st.text_input("Evento")
         anotaciones_evento = st.text_area("Anotaciones")
-        cartel_file = st.file_uploader("Sube la imagen del cartel", type=["jpg", "jpeg", "png"])
+        cartel_file = st.file_uploader("Sube la imagen del cartel (para guardar en local)", type=["jpg", "jpeg", "png"])
         confirmado = st.checkbox("¿Evento confirmado?")
 
         if st.form_submit_button("Guardar Evento"):
@@ -172,7 +173,7 @@ with tab3:
             edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
             edit_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
             edit_fecha = st.date_input("Fecha", value=pd.to_datetime(fila.get("fecha")).date())
-            edit_cartel_file = st.file_uploader("Cambiar imagen del cartel", type=["jpg", "jpeg", "png"])
+            edit_cartel_file = st.file_uploader("Cambiar imagen del cartel (para guardar en local)", type=["jpg", "jpeg", "png"])
             
             col_h1, col_h2 = st.columns(2)
             try: h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
@@ -199,7 +200,6 @@ with tab3:
                     "anotaciones": edit_anotaciones
                 }
                 
-                # Si se sube una nueva imagen en editar, actualizamos la ruta
                 if edit_cartel_file is not None:
                     cartel_path = os.path.join("carteles", edit_cartel_file.name)
                     with open(cartel_path, "wb") as f:
@@ -282,7 +282,7 @@ def publicar_en_instagram(mensaje, imagen_url):
         token = st.secrets["meta"]["page_access_token"].strip()
         
         if not str(imagen_url).startswith("http"):
-            return False, "Instagram requiere una URL pública de la imagen (HTTP/HTTPS). Revisa la columna cartel_url."
+            return False, "Instagram requiere una URL pública de la imagen (HTTP/HTTPS). Adjunta la imagen en la celda 'cartel_url' de Airtable o pon un enlace directo."
 
         # Paso 1: Crear contenedor multimedia
         url_container = f"https://graph.facebook.com/v18.0/{ig_account_id}/media"
@@ -349,11 +349,11 @@ if not df_eventos.empty:
 
     st.text_area("Mensaje que se publicará:", mensaje_auto, height=150)
 
-    # Extraer la imagen correctamente usando la función auxiliar
+    # Extraer la imagen correctamente (soporta adjuntos de Airtable y URLs públicas)
     cartel_val = fila.get("cartel_url", "")
     imagen_final = extraer_url_cartel(cartel_val)
 
-    archivo_subido_extra = st.file_uploader("O sube/cambia el cartel aquí mismo:", type=["jpg", "jpeg", "png"], key="extra_subida")
+    archivo_subido_extra = st.file_uploader("O sube/cambia el cartel localmente aquí:", type=["jpg", "jpeg", "png"], key="extra_subida")
     if archivo_subido_extra is not None:
         temp_path = os.path.join("carteles", archivo_subido_extra.name)
         with open(temp_path, "wb") as f: 
