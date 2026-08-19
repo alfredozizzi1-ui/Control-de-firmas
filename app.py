@@ -240,10 +240,7 @@ with tab3:
         
         opciones_edit = ["--- Selecciona un evento ---"] + df_edit["opcion"].tolist()
         
-        # Inicializar el estado de la selección si no existe
-        if "sel_modificar_evento" not in st.session_state:
-            st.session_state.sel_modificar_evento = "--- Selecciona un evento ---"
-
+        # Desplegable para la selección
         evento_sel = st.selectbox("Selecciona evento", opciones_edit, key="sel_modificar_evento")
 
         if evento_sel != "--- Selecciona un evento ---":
@@ -303,8 +300,9 @@ with tab3:
 
                     if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                         st.cache_data.clear()
-                        # Resetear el selector para que vuelva al estado inicial tras guardar
-                        st.session_state.sel_modificar_evento = "--- Selecciona un evento ---"
+                        # RESETEO DIRECTO DE LA CLAVE EN EL SESSION STATE
+                        del st.session_state["sel_modificar_evento"]
+                        
                         if enviar_mail_edit and email_notif_edit.strip():
                             asunto = f"Actualización de Evento: {edit_autor} en {edit_lugar}"
                             cuerpo = (
@@ -364,6 +362,7 @@ with tab4:
                             }
                             if actualizar_dato("autores", rec_id_aut, datos_aut):
                                 st.cache_data.clear()
+                                del st.session_state["sel_editar_autor"]
                                 st.success("¡Datos del autor actualizados correctamente!")
                                 st.rerun()
                             else:
@@ -429,6 +428,7 @@ with tab5:
                             }
                             if actualizar_dato("librerias", rec_id_lib, datos_lib):
                                 st.cache_data.clear()
+                                del st.session_state["sel_editar_libreria"]
                                 st.success("¡Datos de la librería actualizados correctamente!")
                                 st.rerun()
                             else:
