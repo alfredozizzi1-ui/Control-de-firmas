@@ -239,7 +239,15 @@ with tab3:
         df_edit["opcion"] = df_edit.apply(lambda r: f"#{int(r['id_num'])} - {r.get('Autor')} ({r.get('fecha')})", axis=1)
         
         opciones_edit = ["--- Selecciona un evento ---"] + df_edit["opcion"].tolist()
+        
+        # Detectar cambio de evento para limpiar estado anterior si procede
         evento_sel = st.selectbox("Selecciona evento a modificar:", opciones_edit, key="sel_modificar_evento")
+
+        if "ultimo_evento_edit" not in st.session_state:
+            st.session_state.ultimo_evento_edit = evento_sel
+        elif st.session_state.ultimo_evento_edit != evento_sel:
+            st.session_state.ultimo_evento_edit = evento_sel
+            st.rerun()
 
         if evento_sel != "--- Selecciona un evento ---":
             fila = df_edit[df_edit["opcion"] == evento_sel].iloc[0]
@@ -252,12 +260,12 @@ with tab3:
             if cartel_actual_edit:
                 st.image(cartel_actual_edit, caption="Cartel actualmente asignado", width=200)
 
-            with st.form("form_editar_evento", clear_on_submit=True):
+            with st.form(f"form_editar_evento_{id_actual}", clear_on_submit=True):
                 edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
                 edit_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
                 edit_fecha = st.date_input("Fecha", value=pd.to_datetime(fila.get("fecha")).date())
                 
-                edit_cartel_file = st.file_uploader("Cambiar imagen del cartel", type=["jpg", "jpeg", "png"], key=f"edit_cartel_{id_actual}")
+                edit_cartel_file = st.file_uploader("Cambiar imagen del cartel", type=["jpg", "jpeg", "png"])
                 
                 col_h1, col_h2 = st.columns(2)
                 try: h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
