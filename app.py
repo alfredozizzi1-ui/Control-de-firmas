@@ -173,7 +173,6 @@ with tab2:
         lib_sel = st.selectbox("Seleccionar Librería", sorted(list(set(lista_librerias))) + ["➕ Añadir nueva librería..."])
         libreria_final = st.text_input("Nombre de la nueva librería") if lib_sel == "➕ Añadir nueva librería..." else lib_sel
 
-    # Notificación opcional por correo
     em_aut, em_lib = obtener_email_contacto(autor_final, libreria_final, df_autores, df_librerias)
     email_destina_reg = em_aut or em_lib
 
@@ -245,11 +244,18 @@ with tab3:
         em_aut_e, em_lib_e = obtener_email_contacto(fila.get("Autor", ""), fila.get("lugar", ""), df_autores, df_librerias)
         email_destina_edit = em_aut_e or em_lib_e
         
+        # Mostrar el cartel actual asignado a este evento si existe
+        cartel_actual_edit = st.session_state.get(f"cartel_temp_{id_actual}", extraer_url_cartel(fila.get("cartel_url", "")))
+        if cartel_actual_edit:
+            st.image(cartel_actual_edit, caption="Cartel actualmente asignado", width=200)
+
         with st.form("form_editar_evento"):
             edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
             edit_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
             edit_fecha = st.date_input("Fecha", value=pd.to_datetime(fila.get("fecha")).date())
-            edit_cartel_file = st.file_uploader("Cambiar imagen del cartel", type=["jpg", "jpeg", "png"])
+            
+            # Subidor con KEY DINÁMICA para reiniciar al cambiar de evento
+            edit_cartel_file = st.file_uploader("Cambiar imagen del cartel", type=["jpg", "jpeg", "png"], key=f"edit_cartel_{id_actual}")
             
             col_h1, col_h2 = st.columns(2)
             try: h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
@@ -391,7 +397,7 @@ def publicar_en_instagram(mensaje, imagen_url):
 
         creation_id = data_container.get("id")
 
-        # ESPERA DE 3 SEGUNDOS PARA QUE META PROCESE LA IMAGEN DE LA URL
+        # ESPERA DE 3 SEGUNDOS PARA QUE META PROCESE LA IMAGEN
         time.sleep(3)
 
         # Paso 2: Publicar contenedor
@@ -446,7 +452,6 @@ if not df_eventos.empty:
     cartel_val = fila.get("cartel_url", "")
     url_de_airtable = extraer_url_cartel(cartel_val)
     
-    # OBTENER LA IMAGEN ESPECÍFICA DE ESTE EVENTO
     imagen_final = st.session_state.get(f"cartel_temp_{id_sel}", url_de_airtable)
 
     archivo_subido_extra = st.file_uploader(
