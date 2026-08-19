@@ -64,7 +64,8 @@ def enviar_email(destinatario, asunto, cuerpo):
             server.login(st.secrets["email"]["usuario"], st.secrets["email"]["password"])
             server.sendmail(st.secrets["email"]["usuario"], destinatario, msg.as_string())
         return True
-    except Exception:
+    except Exception as e:
+        st.error(f"Error al enviar email: {e}")
         return False
 
 # --- CONFIGURACIÓN AIRTABLE ---
@@ -127,8 +128,8 @@ df_librerias = cargar_datos("librerias")
 lista_autores = df_autores["Nombre"].dropna().astype(str).tolist() if not df_autores.empty and "Nombre" in df_autores.columns else []
 lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df_librerias.empty and "Nombre" in df_librerias.columns else []
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📅 Listado de Eventos", "➕ Registrar", "✏️ Editar Evento", "👤 Autores", "🏛️ Librerías", "📝 Bloc General"
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "📅 Listado de Eventos", "➕ Registrar", "✏️ Editar Evento", "✉️ Notificar por Email", "👤 Autores", "🏛️ Librerías", "📝 Bloc General"
 ])
 
 with tab1:
@@ -162,8 +163,8 @@ with tab2:
     with st.form("form_nuevo_evento", clear_on_submit=True):
         col_f1, col_f2, col_f3 = st.columns(3)
         fecha_sel = col_f1.date_input("Fecha", value=date.today())
-        hora_inicio = col_f2.time_input("Inicio", value=d_time(18, 0))
-        hora_fin = col_f3.time_input("Fin", value=d_time(19, 30))
+        hora_inicio = col_f1.time_input("Inicio", value=d_time(18, 0))
+        hora_fin = col_f2.time_input("Fin", value=d_time(19, 30))
         evento = st.text_input("Evento")
         anotaciones_evento = st.text_area("Anotaciones")
         cartel_file = st.file_uploader("Sube la imagen del cartel", type=["jpg", "jpeg", "png"])
@@ -251,6 +252,60 @@ with tab3:
                     st.success("¡Evento e imagen actualizados correctamente!"); st.rerun()
 
 with tab4:
+    st.header("✉️ Enviar Notificación por Correo Electrónico")
+    if not df_eventos.empty:
+        df_email = df_eventos.copy()
+        df_email["id_num"] = pd.to_numeric(df_email["id"], errors='coerce').fillna(0)
+        df_email["opcion"] = df_email.apply(lambda r: f"#{int(r['id_num'])} - {r.get('Autor')} ({r.get('fecha')})", axis=1)
+        ev_email_sel = st.selectbox("Selecciona el evento para enviar aviso:", df_email["opcion"].tolist(), key="sel_ev_mail")
+        fila_m = df_email[df_email["opcion"] == ev_email_sel].iloc[0]
+
+        autor_m = fila_m.get("Autor", "")
+        lugar_m = fila_m.get("lugar", "")
+        fecha_m = fila_m.get("fecha", "")
+        h_ini_m = fila_m.get("hora_inicio", "")
+        h_fin_m = fila_m.get("hora_fin", "")
+
+        # Buscar emails sugeridos de Autor y Librería
+        email_autor_sug = ""
+        email_lib_sug = ""
+        if not df_autores.empty and "Nombre" in df_autores.columns and "Email" in df_autores.columns:
+            f_aut = df_autores[df_autores["Nombre"] == autor_m]
+            if not f_aut.empty: email_autor_sug = str(f_aut.iloc[0].get("Email", ""))
+        
+        if not df_librerias.empty and "Nombre" in df_librerias.columns and "Email" in df_librerias.columns:
+            f_lib = df_librerias[df_librerias["Nombre"] == lugar_m]
+            if not f_lib.empty: email_lib_sug = str(f_lib.iloc[0].get("Email", ""))
+
+        st.subheader("Configurar Mensaje")
+        destinatario = st.text_input("Correo electrónico del destinatario:", value=email_autor_sug or email_lib_sug)
+        asunto_defecto = f"Confirmación de Evento: Firma de libros de {autor_m} en {lugar_m}"
+        asunto_mail = st.text_input("Asunto:", value=asunto_defecto)
+        
+        cuerpo_defecto = (
+            f"Hola,\n\n"
+            f"Te escribimos para confirmar los detalles de la presentación/firma del libro de {autor_m}.\n\n"
+            f"📍 Lugar: {lugar_m}\n"
+            f"📅 Fecha: {fecha_m}\n"
+            f"⏰ Horario: de {h_ini_m} a {h_fin_m} hs\n\n"
+            f"Por favor, avísanos si necesitas cualquier otro detalle o ajuste.\n\n"
+            f"Un saludo cordial."
+        )
+        cuerpo_mail = st.text_area("Cuerpo del mensaje:", value=cuerpo_defecto, height=200)
+
+        if st.button("📧 Enviar Correo Ahora", use_container_width=True):
+            if not destinatario.strip():
+                st.error("Por favor, introduce una dirección de correo válida.")
+            else:
+                with st.spinner("Enviando correo electrónico..."):
+                    if enviar_email(destinatario.strip(), asunto_mail, cuerpo_mail):
+                        st.success(f"¡Correo enviado con éxito a {destinatario}!")
+                    else:
+                        st.error("Ocurrió un fallo al enviar el correo. Revisa tus Secrets [email].")
+    else:
+        st.info("No hay eventos disponibles para enviar correo.")
+
+with tab5:
     st.header("👤 Autores")
     with st.form("form_nuevo_autor", clear_on_submit=True):
         nuevo_autor_nombre = st.text_input("Nombre y Apellidos del Autor")
@@ -269,16 +324,17 @@ with tab4:
     st.markdown("---")
     st.dataframe(df_autores, use_container_width=True, hide_index=True)
 
-with tab5:
+with tab6:
     st.header("🏛️ Librerías")
     with st.form("form_nueva_libreria", clear_on_submit=True):
         nueva_lib_nombre = st.text_input("Nombre de la Librería / Punto de venta")
         nueva_lib_direccion = st.text_input("Dirección / Municipio (Opcional)")
+        nueva_lib_email = st.text_input("Correo electrónico (Opcional)")
         if st.form_submit_button("➕ Guardar Librería"):
             if not nueva_lib_nombre.strip():
                 st.error("El nombre de la librería es obligatorio.")
             else:
-                record = {"Nombre": nueva_lib_nombre.strip(), "Direccion": nueva_lib_direccion.strip()}
+                record = {"Nombre": nueva_lib_nombre.strip(), "Direccion": nueva_lib_direccion.strip(), "Email": nueva_lib_email.strip()}
                 if guardar_dato("librerias", record):
                     st.cache_data.clear()
                     st.success(f"¡Librería '{nueva_lib_nombre}' guardada correctamente!")
@@ -288,7 +344,7 @@ with tab5:
     st.markdown("---")
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
 
-with tab6:
+with tab7:
     st.header("Bloc General"); st.text_area("Notas", height=300)
 
 # ==========================================
