@@ -145,6 +145,7 @@ opciones_navegacion = [
     "📅 Listado de Eventos", 
     "➕ Registrar Evento", 
     "✏️ Editar Evento", 
+    "📱 Publicar en Redes",
     "👤 Autores", 
     "🏛️ Librerías", 
     "📝 Bloc General"
@@ -247,7 +248,7 @@ elif menu_seleccionado == "➕ Registrar Evento":
                         enviar_email(email_notif_reg.strip(), asunto, cuerpo)
                     st.success("¡Evento guardado correctamente!"); st.rerun()
 
-# 3. EDITAR EVENTO (AL CAMBIAR DE MENÚ SE RESETEA AUTOMÁTICAMENTE)
+# 3. EDITAR EVENTO
 elif menu_seleccionado == "✏️ Editar Evento":
     st.header("Modificar Evento")
     if not df_eventos.empty:
@@ -329,7 +330,91 @@ elif menu_seleccionado == "✏️ Editar Evento":
                             enviar_email(email_notif_edit.strip(), asunto, cuerpo)
                         st.success("¡Evento e imagen actualizados correctamente!"); st.rerun()
 
-# 4. AUTORES
+# 4. PUBLICAR EN REDES SOCIALES
+elif menu_seleccionado == "📱 Publicar en Redes":
+    st.header("📚 Publicar Evento en Redes Sociales")
+
+    if not df_eventos.empty:
+        df_eventos["opcion_menu"] = df_eventos["id"].astype(str) + " - " + df_eventos["evento"].astype(str) + " (" + df_eventos["lugar"].astype(str) + ")"
+        opciones_redes = ["--- Selecciona un evento ---"] + df_eventos["opcion_menu"].tolist()
+        
+        evento_elegido = st.selectbox("Selecciona el evento a publicar:", opciones_redes)
+        
+        if evento_elegido != "--- Selecciona un evento ---":
+            fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
+            id_sel = str(fila.get("id"))
+
+            autor_v = str(fila.get('Autor', ''))
+            lugar_v = str(fila.get('lugar', ''))
+            evento_v = str(fila.get('evento', ''))
+            try:
+                fecha_obj = pd.to_datetime(fila.get('fecha'))
+                fecha_v = fecha_obj.strftime('%d/%m/%Y')
+            except:
+                fecha_v = str(fila.get('fecha', ''))
+            hora_v = str(fila.get('hora_inicio', ''))
+
+            mensaje_auto = (
+                f"¡No te pierdas nuestro nuevo evento! 📖✨\n\n"
+                f"Presentación del nuevo libro de {autor_v} el día {fecha_v} a las {hora_v} horas en {lugar_v}.\n\n"
+                f"¡Te esperamos para compartir una jornada literaria inolvidable! 🖋️📚"
+            )
+
+            st.text_area("Mensaje que se publicará:", mensaje_auto, height=150)
+
+            cartel_val = fila.get("cartel_url", "")
+            url_de_airtable = extraer_url_cartel(cartel_val)
+            
+            imagen_final = st.session_state.get(f"cartel_temp_{id_sel}", url_de_airtable)
+
+            archivo_subido_extra = st.file_uploader(
+                "O sube/cambia el cartel localmente aquí:", 
+                type=["jpg", "jpeg", "png"], 
+                key=f"extra_subida_{id_sel}"
+            )
+            
+            if archivo_subido_extra is not None:
+                with st.spinner("Subiendo cartel a servidor público..."):
+                    url_temp = subir_a_cloudinary(archivo_subido_extra)
+                    if url_temp:
+                        imagen_final = url_temp
+                        st.session_state[f"cartel_temp_{id_sel}"] = url_temp
+                        actualizar_dato("eventos", fila["airtable_record_id"], {"cartel_url": [{"url": url_temp}]})
+
+            if imagen_final: 
+                st.image(imagen_final, width=300)
+            else:
+                st.warning("⚠️ Este evento no tiene cartel asignado todavía.")
+            
+            col_fb, col_ig = st.columns(2)
+
+            with col_fb:
+                if st.button("🚀 Publicar en Facebook con Imagen", use_container_width=True):
+                    if not imagen_final: 
+                        st.error("Falta imagen.")
+                    else:
+                        with st.spinner("Subiendo imagen y publicando en Facebook..."):
+                            exito, mensaje = publicar_en_facebook(mensaje_auto, imagen_final)
+                            if exito: 
+                                st.success(mensaje)
+                            else: 
+                                st.error(mensaje)
+
+            with col_ig:
+                if st.button("📸 Publicar en Instagram con Imagen", use_container_width=True):
+                    if not imagen_final:
+                        st.error("Falta imagen.")
+                    else:
+                        with st.spinner("Enviando publicación a Instagram..."):
+                            exito, mensaje = publicar_en_instagram(mensaje_auto, imagen_final)
+                            if exito:
+                                st.success(mensaje)
+                            else:
+                                st.error(mensaje)
+    else:
+        st.info("No hay eventos disponibles.")
+
+# 5. AUTORES
 elif menu_seleccionado == "👤 Autores":
     st.header("👤 Autores")
     
@@ -388,7 +473,7 @@ elif menu_seleccionado == "👤 Autores":
         cols_autores = [c for c in ["Nombre", "Email"] if c in df_autores.columns]
         st.dataframe(df_autores[cols_autores], use_container_width=True, hide_index=True)
 
-# 5. LIBRERÍAS
+# 6. LIBRERÍAS
 elif menu_seleccionado == "🏛️ Librerías":
     st.header("🏛️ Librerías")
     
@@ -454,7 +539,7 @@ elif menu_seleccionado == "🏛️ Librerías":
         cols_librerias = [c for c in ["Nombre", "Direccion", "Email"] if c in df_librerias.columns]
         st.dataframe(df_librerias[cols_librerias], use_container_width=True, hide_index=True)
 
-# 6. BLOC GENERAL
+# 7. BLOC GENERAL
 elif menu_seleccionado == "📝 Bloc General":
     st.header("Bloc General")
     st.text_area("Notas", height=300)
@@ -524,86 +609,3 @@ def publicar_en_instagram(mensaje, imagen_url):
 
     except Exception as e:
         return False, f"Fallo crítico en Instagram: {str(e)}"
-
-# ==========================================
-# --- AUTOMATIZACIÓN DESDE AIRTABLE ---
-# ==========================================
-
-st.markdown("---")
-st.markdown("### 📚 Publicar Evento en Redes Sociales")
-
-if not df_eventos.empty:
-    df_eventos["opcion_menu"] = df_eventos["id"].astype(str) + " - " + df_eventos["evento"].astype(str) + " (" + df_eventos["lugar"].astype(str) + ")"
-    evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_eventos["opcion_menu"])
-    fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
-    id_sel = str(fila.get("id"))
-
-    autor_v = str(fila.get('Autor', ''))
-    lugar_v = str(fila.get('lugar', ''))
-    evento_v = str(fila.get('evento', ''))
-    try:
-        fecha_obj = pd.to_datetime(fila.get('fecha'))
-        fecha_v = fecha_obj.strftime('%d/%m/%Y')
-    except:
-        fecha_v = str(fila.get('fecha', ''))
-    hora_v = str(fila.get('hora_inicio', ''))
-
-    mensaje_auto = (
-        f"¡No te pierdas nuestro nuevo evento! 📖✨\n\n"
-        f"Presentación del nuevo libro de {autor_v} el día {fecha_v} a las {hora_v} horas en {lugar_v}.\n\n"
-        f"¡Te esperamos para compartir una jornada literaria inolvidable! 🖋️📚"
-    )
-
-    st.text_area("Mensaje que se publicará:", mensaje_auto, height=150)
-
-    cartel_val = fila.get("cartel_url", "")
-    url_de_airtable = extraer_url_cartel(cartel_val)
-    
-    imagen_final = st.session_state.get(f"cartel_temp_{id_sel}", url_de_airtable)
-
-    archivo_subido_extra = st.file_uploader(
-        "O sube/cambia el cartel localmente aquí:", 
-        type=["jpg", "jpeg", "png"], 
-        key=f"extra_subida_{id_sel}"
-    )
-    
-    if archivo_subido_extra is not None:
-        with st.spinner("Subiendo cartel a servidor público..."):
-            url_temp = subir_a_cloudinary(archivo_subido_extra)
-            if url_temp:
-                imagen_final = url_temp
-                st.session_state[f"cartel_temp_{id_sel}"] = url_temp
-                actualizar_dato("eventos", fila["airtable_record_id"], {"cartel_url": [{"url": url_temp}]})
-
-    if imagen_final: 
-        st.image(imagen_final, width=300)
-    else:
-        st.warning("⚠️ Este evento no tiene cartel asignado todavía.")
-    
-    col_fb, col_ig = st.columns(2)
-
-    with col_fb:
-        if st.button("🚀 Publicar en Facebook con Imagen", use_container_width=True):
-            if not imagen_final: 
-                st.error("Falta imagen.")
-            else:
-                with st.spinner("Subiendo imagen y publicando en Facebook..."):
-                    exito, mensaje = publicar_en_facebook(mensaje_auto, imagen_final)
-                    if exito: 
-                        st.success(mensaje)
-                    else: 
-                        st.error(mensaje)
-
-    with col_ig:
-        if st.button("📸 Publicar en Instagram con Imagen", use_container_width=True):
-            if not imagen_final:
-                st.error("Falta imagen.")
-            else:
-                with st.spinner("Enviando publicación a Instagram..."):
-                    exito, mensaje = publicar_en_instagram(mensaje_auto, imagen_final)
-                    if exito:
-                        st.success(mensaje)
-                    else:
-                        st.error(mensaje)
-else:
-    st.info("No hay eventos disponibles.")
