@@ -3,8 +3,9 @@ import pandas as pd
 import requests
 import smtplib
 from email.mime.text import MIMEText
-from datetime import datetime, time, date
+from datetime import datetime, time as d_time, date
 import os
+import time
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
@@ -14,7 +15,7 @@ if not os.path.exists("carteles"):
     os.makedirs("carteles")
 
 # ==========================================
-# --- FUNCIÓN DE SUBIDA A CLOUDINARY (100% GRATIS) ---
+# --- FUNCIÓN DE SUBIDA A CLOUDINARY ---
 # ==========================================
 def subir_a_cloudinary(archivo_file_o_ruta):
     """ Suba una imagen a Cloudinary (gratis) y devuelve la URL pública directa """
@@ -44,7 +45,6 @@ def subir_a_cloudinary(archivo_file_o_ruta):
         return ""
 
 def extraer_url_cartel(val):
-    """ Extrae la URL de la columna cartel_url (soporta adjuntos o enlaces texto) """
     if isinstance(val, list) and len(val) > 0:
         primer_item = val[0]
         if isinstance(primer_item, dict):
@@ -79,7 +79,7 @@ except Exception:
     st.error("⚠️ Configura las claves de Airtable en los Secrets.")
     st.stop()
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=5)
 def cargar_datos(nombre_tabla):
     url = f"https://api.airtable.com/v0/{base_id}/{nombre_tabla}"
     try:
@@ -162,8 +162,8 @@ with tab2:
     with st.form("form_nuevo_evento", clear_on_submit=True):
         col_f1, col_f2, col_f3 = st.columns(3)
         fecha_sel = col_f1.date_input("Fecha", value=date.today())
-        hora_inicio = col_f2.time_input("Inicio", value=time(18, 0))
-        hora_fin = col_f3.time_input("Fin", value=time(19, 30))
+        hora_inicio = col_f2.time_input("Inicio", value=d_time(18, 0))
+        hora_fin = col_f3.time_input("Fin", value=d_time(19, 30))
         evento = st.text_input("Evento")
         anotaciones_evento = st.text_area("Anotaciones")
         cartel_file = st.file_uploader("Sube la imagen del cartel", type=["jpg", "jpeg", "png"])
@@ -196,8 +196,7 @@ with tab2:
 
                 if guardar_dato("eventos", record):
                     st.cache_data.clear()
-                    st.success("¡Evento guardado con imagen pública!")
-                    st.rerun()
+                    st.success("¡Evento guardado correctamente!"); st.rerun()
 
 with tab3:
     st.header("Modificar Evento")
@@ -217,9 +216,9 @@ with tab3:
             
             col_h1, col_h2 = st.columns(2)
             try: h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
-            except: h_ini_val = time(18, 0)
+            except: h_ini_val = d_time(18, 0)
             try: h_fin_val = datetime.strptime(str(fila.get("hora_fin", "19:30")), "%H:%M").time()
-            except: h_fin_val = time(19, 30)
+            except: h_fin_val = d_time(19, 30)
 
             with col_h1:
                 edit_hora_inicio = st.time_input("Hora de Inicio", value=h_ini_val)
@@ -249,8 +248,7 @@ with tab3:
 
                 if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                     st.cache_data.clear()
-                    st.success("¡Evento e imagen actualizados en Airtable!")
-                    st.rerun()
+                    st.success("¡Evento e imagen actualizados correctamente!"); st.rerun()
 
 with tab4:
     st.header("👤 Autores")
@@ -297,13 +295,13 @@ with tab6:
 # --- MÓDULOS DE PUBLICACIÓN EN REDES ---
 # ==========================================
 
-def publicar_en_facebook(mensaje, imagen_path_o_url):
+def publicar_en_facebook(mensaje, imagen_url):
     try:
         page_id = st.secrets["meta"]["page_id"].strip()
         token = st.secrets["meta"]["page_access_token"].strip()
         url = f"https://graph.facebook.com/v18.0/{page_id}/photos"
         
-        payload = {'url': imagen_path_o_url, 'caption': mensaje, 'access_token': token}
+        payload = {'url': imagen_url, 'caption': mensaje, 'access_token': token}
         response = requests.post(url, data=payload)
             
         resultado = response.json()
@@ -321,8 +319,9 @@ def publicar_en_instagram(mensaje, imagen_url):
         token = st.secrets["meta"]["page_access_token"].strip()
         
         if not str(imagen_url).startswith("http"):
-            return False, "Instagram requiere una URL pública de la imagen (HTTP/HTTPS). Vuelve a editar el evento y sube la imagen de nuevo."
+            return False, "Instagram requiere una URL pública de la imagen (HTTP/HTTPS)."
 
+        # Paso 1: Crear contenedor de medios
         url_container = f"https://graph.facebook.com/v18.0/{ig_account_id}/media"
         payload_container = {
             'image_url': imagen_url,
@@ -338,6 +337,10 @@ def publicar_en_instagram(mensaje, imagen_url):
 
         creation_id = data_container.get("id")
 
+        # ESPERA DE 3 SEGUNDOS PARA QUE META PROCESE LA IMAGEN DE LA URL
+        time.sleep(3)
+
+        # Paso 2: Publicar contenedor
         url_publish = f"https://graph.facebook.com/v18.0/{ig_account_id}/media_publish"
         payload_publish = {
             'creation_id': creation_id,
@@ -386,17 +389,18 @@ if not df_eventos.empty:
 
     st.text_area("Mensaje que se publicará:", mensaje_auto, height=150)
 
-    # REVISAR PRIMERO SI TENEMOS URL RECIENTE EN MEMORIA LOCAL, SI NO, USAR AIRTABLE
     cartel_val = fila.get("cartel_url", "")
     imagen_final = st.session_state.get(f"cartel_temp_{id_sel}", extraer_url_cartel(cartel_val))
 
     archivo_subido_extra = st.file_uploader("O sube/cambia el cartel localmente aquí:", type=["jpg", "jpeg", "png"], key="extra_subida")
     if archivo_subido_extra is not None:
-        with st.spinner("Subiendo cartel público..."):
+        with st.spinner("Subiendo cartel a servidor público..."):
             url_temp = subir_a_cloudinary(archivo_subido_extra)
             if url_temp:
                 imagen_final = url_temp
                 st.session_state[f"cartel_temp_{id_sel}"] = url_temp
+                # GUARDAR LA URL EN AIRTABLE DIRECTAMENTE
+                actualizar_dato("eventos", fila["airtable_record_id"], {"cartel_url": url_temp})
 
     if imagen_final: 
         st.image(imagen_final, width=300)
