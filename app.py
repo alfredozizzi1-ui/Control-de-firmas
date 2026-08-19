@@ -7,9 +7,24 @@ from datetime import datetime, time as d_time, date
 import os
 import time
 
-st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
-st.title("📋 Control Interno: Firmas de Autores")
-st.caption("Gestión interna sincronizada mediante API directa con Airtable.")
+st.set_page_config(
+    page_title="Control Interno - Atlántida Distribuciones",
+    page_icon="📚",
+    layout="wide"
+)
+
+# ==========================================
+# --- CABECERA PERSONALIZADA CON LOGO ---
+# ==========================================
+col_logo, col_titulo = st.columns([1, 4])
+
+with col_logo:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=180)
+
+with col_titulo:
+    st.title("📋 Control Interno: Firmas de Autores")
+    st.caption("Atlántida Distribuciones — Gestión interna sincronizada mediante API directa con Airtable.")
 
 if not os.path.exists("carteles"):
     os.makedirs("carteles")
