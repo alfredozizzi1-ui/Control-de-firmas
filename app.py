@@ -121,6 +121,19 @@ def actualizar_dato(nombre_tabla, record_id, datos):
     except Exception:
         return False
 
+def obtener_email_contacto(autor, lugar, df_aut, df_lib):
+    email_aut = ""
+    email_lugar = ""
+    if not df_aut.empty and "Nombre" in df_aut.columns and "Email" in df_aut.columns:
+        f_aut = df_aut[df_aut["Nombre"] == autor]
+        if not f_aut.empty:
+            email_aut = str(f_aut.iloc[0].get("Email", "")).strip()
+    if not df_lib.empty and "Nombre" in df_lib.columns and "Email" in df_lib.columns:
+        f_lib = df_lib[df_lib["Nombre"] == lugar]
+        if not f_lib.empty:
+            email_lugar = str(f_lib.iloc[0].get("Email", "")).strip()
+    return email_aut, email_lugar
+
 df_eventos = cargar_datos("eventos")
 df_autores = cargar_datos("autores")
 df_librerias = cargar_datos("librerias")
@@ -128,8 +141,8 @@ df_librerias = cargar_datos("librerias")
 lista_autores = df_autores["Nombre"].dropna().astype(str).tolist() if not df_autores.empty and "Nombre" in df_autores.columns else []
 lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df_librerias.empty and "Nombre" in df_librerias.columns else []
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "📅 Listado de Eventos", "➕ Registrar", "✏️ Editar Evento", "✉️ Notificar por Email", "👤 Autores", "🏛️ Librerías", "📝 Bloc General"
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📅 Listado de Eventos", "➕ Registrar", "✏️ Editar Evento", "👤 Autores", "🏛️ Librerías", "📝 Bloc General"
 ])
 
 with tab1:
@@ -160,15 +173,24 @@ with tab2:
         lib_sel = st.selectbox("Seleccionar Librería", sorted(list(set(lista_librerias))) + ["➕ Añadir nueva librería..."])
         libreria_final = st.text_input("Nombre de la nueva librería") if lib_sel == "➕ Añadir nueva librería..." else lib_sel
 
+    # Notificación opcional por correo
+    em_aut, em_lib = obtener_email_contacto(autor_final, libreria_final, df_autores, df_librerias)
+    email_destina_reg = em_aut or em_lib
+
     with st.form("form_nuevo_evento", clear_on_submit=True):
         col_f1, col_f2, col_f3 = st.columns(3)
         fecha_sel = col_f1.date_input("Fecha", value=date.today())
-        hora_inicio = col_f1.time_input("Inicio", value=d_time(18, 0))
-        hora_fin = col_f2.time_input("Fin", value=d_time(19, 30))
+        hora_inicio = col_f2.time_input("Inicio", value=d_time(18, 0))
+        hora_fin = col_f3.time_input("Fin", value=d_time(19, 30))
         evento = st.text_input("Evento")
         anotaciones_evento = st.text_area("Anotaciones")
         cartel_file = st.file_uploader("Sube la imagen del cartel", type=["jpg", "jpeg", "png"])
         confirmado = st.checkbox("¿Evento confirmado?")
+
+        st.markdown("---")
+        st.markdown("##### ✉️ Notificación por correo")
+        enviar_mail_reg = st.checkbox("Enviar correo de confirmación al guardar")
+        email_notif_reg = st.text_input("Correo destinatario:", value=email_destina_reg)
 
         if st.form_submit_button("Guardar Evento"):
             if not autor_final or not libreria_final: 
@@ -197,6 +219,17 @@ with tab2:
 
                 if guardar_dato("eventos", record):
                     st.cache_data.clear()
+                    if enviar_mail_reg and email_notif_reg.strip():
+                        asunto = f"Confirmación de Evento: {autor_final} en {libreria_final}"
+                        cuerpo = (
+                            f"Hola,\n\nTe confirmamos la programación del evento:\n"
+                            f"Autor: {autor_final}\n"
+                            f"Lugar: {libreria_final}\n"
+                            f"Fecha: {fecha_sel.strftime('%d/%m/%Y')}\n"
+                            f"Horario: {hora_inicio.strftime('%H:%M')} - {hora_fin.strftime('%H:%M')}\n\n"
+                            f"Un saludo."
+                        )
+                        enviar_email(email_notif_reg.strip(), asunto, cuerpo)
                     st.success("¡Evento guardado correctamente!"); st.rerun()
 
 with tab3:
@@ -208,6 +241,9 @@ with tab3:
         evento_sel = st.selectbox("Selecciona evento", df_edit["opcion"].tolist())
         fila = df_edit[df_edit["opcion"] == evento_sel].iloc[0]
         id_actual = str(fila.get("id"))
+
+        em_aut_e, em_lib_e = obtener_email_contacto(fila.get("Autor", ""), fila.get("lugar", ""), df_autores, df_librerias)
+        email_destina_edit = em_aut_e or em_lib_e
         
         with st.form("form_editar_evento"):
             edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
@@ -228,6 +264,11 @@ with tab3:
             
             edit_evento_desc = st.text_input("Evento", value=fila.get("evento", ""))
             edit_anotaciones = st.text_area("Anotaciones", value=fila.get("anotaciones", ""))
+
+            st.markdown("---")
+            st.markdown("##### ✉️ Notificación por correo")
+            enviar_mail_edit = st.checkbox("Enviar correo con las modificaciones")
+            email_notif_edit = st.text_input("Correo destinatario:", value=email_destina_edit)
             
             if st.form_submit_button("Guardar Cambios"):
                 datos_actualizacion = {
@@ -249,63 +290,20 @@ with tab3:
 
                 if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                     st.cache_data.clear()
+                    if enviar_mail_edit and email_notif_edit.strip():
+                        asunto = f"Actualización de Evento: {edit_autor} en {edit_lugar}"
+                        cuerpo = (
+                            f"Hola,\n\nTe informamos de los cambios en el evento:\n"
+                            f"Autor: {edit_autor}\n"
+                            f"Lugar: {edit_lugar}\n"
+                            f"Fecha: {edit_fecha.strftime('%d/%m/%Y')}\n"
+                            f"Horario: {edit_hora_inicio.strftime('%H:%M')} - {edit_hora_fin.strftime('%H:%M')}\n\n"
+                            f"Un saludo."
+                        )
+                        enviar_email(email_notif_edit.strip(), asunto, cuerpo)
                     st.success("¡Evento e imagen actualizados correctamente!"); st.rerun()
 
 with tab4:
-    st.header("✉️ Enviar Notificación por Correo Electrónico")
-    if not df_eventos.empty:
-        df_email = df_eventos.copy()
-        df_email["id_num"] = pd.to_numeric(df_email["id"], errors='coerce').fillna(0)
-        df_email["opcion"] = df_email.apply(lambda r: f"#{int(r['id_num'])} - {r.get('Autor')} ({r.get('fecha')})", axis=1)
-        ev_email_sel = st.selectbox("Selecciona el evento para enviar aviso:", df_email["opcion"].tolist(), key="sel_ev_mail")
-        fila_m = df_email[df_email["opcion"] == ev_email_sel].iloc[0]
-
-        autor_m = fila_m.get("Autor", "")
-        lugar_m = fila_m.get("lugar", "")
-        fecha_m = fila_m.get("fecha", "")
-        h_ini_m = fila_m.get("hora_inicio", "")
-        h_fin_m = fila_m.get("hora_fin", "")
-
-        # Buscar emails sugeridos de Autor y Librería
-        email_autor_sug = ""
-        email_lib_sug = ""
-        if not df_autores.empty and "Nombre" in df_autores.columns and "Email" in df_autores.columns:
-            f_aut = df_autores[df_autores["Nombre"] == autor_m]
-            if not f_aut.empty: email_autor_sug = str(f_aut.iloc[0].get("Email", ""))
-        
-        if not df_librerias.empty and "Nombre" in df_librerias.columns and "Email" in df_librerias.columns:
-            f_lib = df_librerias[df_librerias["Nombre"] == lugar_m]
-            if not f_lib.empty: email_lib_sug = str(f_lib.iloc[0].get("Email", ""))
-
-        st.subheader("Configurar Mensaje")
-        destinatario = st.text_input("Correo electrónico del destinatario:", value=email_autor_sug or email_lib_sug)
-        asunto_defecto = f"Confirmación de Evento: Firma de libros de {autor_m} en {lugar_m}"
-        asunto_mail = st.text_input("Asunto:", value=asunto_defecto)
-        
-        cuerpo_defecto = (
-            f"Hola,\n\n"
-            f"Te escribimos para confirmar los detalles de la presentación/firma del libro de {autor_m}.\n\n"
-            f"📍 Lugar: {lugar_m}\n"
-            f"📅 Fecha: {fecha_m}\n"
-            f"⏰ Horario: de {h_ini_m} a {h_fin_m} hs\n\n"
-            f"Por favor, avísanos si necesitas cualquier otro detalle o ajuste.\n\n"
-            f"Un saludo cordial."
-        )
-        cuerpo_mail = st.text_area("Cuerpo del mensaje:", value=cuerpo_defecto, height=200)
-
-        if st.button("📧 Enviar Correo Ahora", use_container_width=True):
-            if not destinatario.strip():
-                st.error("Por favor, introduce una dirección de correo válida.")
-            else:
-                with st.spinner("Enviando correo electrónico..."):
-                    if enviar_email(destinatario.strip(), asunto_mail, cuerpo_mail):
-                        st.success(f"¡Correo enviado con éxito a {destinatario}!")
-                    else:
-                        st.error("Ocurrió un fallo al enviar el correo. Revisa tus Secrets [email].")
-    else:
-        st.info("No hay eventos disponibles para enviar correo.")
-
-with tab5:
     st.header("👤 Autores")
     with st.form("form_nuevo_autor", clear_on_submit=True):
         nuevo_autor_nombre = st.text_input("Nombre y Apellidos del Autor")
@@ -324,7 +322,7 @@ with tab5:
     st.markdown("---")
     st.dataframe(df_autores, use_container_width=True, hide_index=True)
 
-with tab6:
+with tab5:
     st.header("🏛️ Librerías")
     with st.form("form_nueva_libreria", clear_on_submit=True):
         nueva_lib_nombre = st.text_input("Nombre de la Librería / Punto de venta")
@@ -344,7 +342,7 @@ with tab6:
     st.markdown("---")
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
 
-with tab7:
+with tab6:
     st.header("Bloc General"); st.text_area("Notas", height=300)
 
 # ==========================================
