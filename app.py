@@ -213,7 +213,8 @@ with tab2:
                     "confirmado": bool(confirmado)
                 }
                 if cartel_url_subida:
-                    record["cartel_url"] = cartel_url_subida
+                    # FORMATO CORRECTO PARA ADJUNTOS EN AIRTABLE
+                    record["cartel_url"] = [{"url": cartel_url_subida}]
                     st.session_state[f"cartel_temp_{nuevo_id}"] = cartel_url_subida
 
                 if guardar_dato("eventos", record):
@@ -237,77 +238,87 @@ with tab3:
         df_edit = df_eventos.copy()
         df_edit["id_num"] = pd.to_numeric(df_edit["id"], errors='coerce').fillna(0)
         df_edit["opcion"] = df_edit.apply(lambda r: f"#{int(r['id_num'])} - {r.get('Autor')} ({r.get('fecha')})", axis=1)
-        evento_sel = st.selectbox("Selecciona evento", df_edit["opcion"].tolist())
-        fila = df_edit[df_edit["opcion"] == evento_sel].iloc[0]
-        id_actual = str(fila.get("id"))
-
-        em_aut_e, em_lib_e = obtener_email_contacto(fila.get("Autor", ""), fila.get("lugar", ""), df_autores, df_librerias)
-        email_destina_edit = em_aut_e or em_lib_e
         
-        # Mostrar el cartel actual asignado a este evento si existe
-        cartel_actual_edit = st.session_state.get(f"cartel_temp_{id_actual}", extraer_url_cartel(fila.get("cartel_url", "")))
-        if cartel_actual_edit:
-            st.image(cartel_actual_edit, caption="Cartel actualmente asignado", width=200)
+        opciones_edit = ["--- Selecciona un evento ---"] + df_edit["opcion"].tolist()
+        evento_sel = st.selectbox("Selecciona evento", opciones_edit, key="sel_modificar_evento")
 
-        with st.form("form_editar_evento"):
-            edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
-            edit_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
-            edit_fecha = st.date_input("Fecha", value=pd.to_datetime(fila.get("fecha")).date())
+        # DETECTAR CAMBIO DE EVENTO PARA LIMPIAR MEMORIA ANTERIOR
+        if "evento_anterior_edit" not in st.session_state:
+            st.session_state.evento_anterior_edit = evento_sel
+        elif st.session_state.evento_anterior_edit != evento_sel:
+            st.session_state.evento_anterior_edit = evento_sel
+            st.rerun()
+
+        if evento_sel != "--- Selecciona un evento ---":
+            fila = df_edit[df_edit["opcion"] == evento_sel].iloc[0]
+            id_actual = str(fila.get("id"))
+
+            em_aut_e, em_lib_e = obtener_email_contacto(fila.get("Autor", ""), fila.get("lugar", ""), df_autores, df_librerias)
+            email_destina_edit = em_aut_e or em_lib_e
             
-            # Subidor con KEY DINÁMICA para reiniciar al cambiar de evento
-            edit_cartel_file = st.file_uploader("Cambiar imagen del cartel", type=["jpg", "jpeg", "png"], key=f"edit_cartel_{id_actual}")
-            
-            col_h1, col_h2 = st.columns(2)
-            try: h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
-            except: h_ini_val = d_time(18, 0)
-            try: h_fin_val = datetime.strptime(str(fila.get("hora_fin", "19:30")), "%H:%M").time()
-            except: h_fin_val = d_time(19, 30)
+            cartel_actual_edit = st.session_state.get(f"cartel_temp_{id_actual}", extraer_url_cartel(fila.get("cartel_url", "")))
+            if cartel_actual_edit:
+                st.image(cartel_actual_edit, caption="Cartel actualmente asignado", width=200)
 
-            with col_h1:
-                edit_hora_inicio = st.time_input("Hora de Inicio", value=h_ini_val)
-            with col_h2:
-                edit_hora_fin = st.time_input("Hora de Fin", value=h_fin_val)
-            
-            edit_evento_desc = st.text_input("Evento", value=fila.get("evento", ""))
-            edit_anotaciones = st.text_area("Anotaciones", value=fila.get("anotaciones", ""))
+            with st.form(f"form_editar_evento_{id_actual}"):
+                edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
+                edit_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
+                edit_fecha = st.date_input("Fecha", value=pd.to_datetime(fila.get("fecha")).date())
+                
+                edit_cartel_file = st.file_uploader("Cambiar imagen del cartel", type=["jpg", "jpeg", "png"], key=f"edit_cartel_{id_actual}")
+                
+                col_h1, col_h2 = st.columns(2)
+                try: h_ini_val = datetime.strptime(str(fila.get("hora_inicio", "18:00")), "%H:%M").time()
+                except: h_ini_val = d_time(18, 0)
+                try: h_fin_val = datetime.strptime(str(fila.get("hora_fin", "19:30")), "%H:%M").time()
+                except: h_fin_val = d_time(19, 30)
 
-            st.markdown("---")
-            st.markdown("##### ✉️ Notificación por correo")
-            enviar_mail_edit = st.checkbox("Enviar correo con las modificaciones")
-            email_notif_edit = st.text_input("Correo destinatario:", value=email_destina_edit)
-            
-            if st.form_submit_button("Guardar Cambios"):
-                datos_actualizacion = {
-                    "Autor": edit_autor, 
-                    "lugar": edit_lugar, 
-                    "fecha": str(edit_fecha), 
-                    "hora_inicio": edit_hora_inicio.strftime("%H:%M"), 
-                    "hora_fin": edit_hora_fin.strftime("%H:%M"), 
-                    "evento": edit_evento_desc,
-                    "anotaciones": edit_anotaciones
-                }
+                with col_h1:
+                    edit_hora_inicio = st.time_input("Hora de Inicio", value=h_ini_val)
+                with col_h2:
+                    edit_hora_fin = st.time_input("Hora de Fin", value=h_fin_val)
+                
+                edit_evento_desc = st.text_input("Evento", value=fila.get("evento", ""))
+                edit_anotaciones = st.text_area("Anotaciones", value=fila.get("anotaciones", ""))
 
-                if edit_cartel_file is not None:
-                    with st.spinner("Subiendo nuevo cartel..."):
-                        nueva_url = subir_a_cloudinary(edit_cartel_file)
-                        if nueva_url:
-                            datos_actualizacion["cartel_url"] = nueva_url
-                            st.session_state[f"cartel_temp_{id_actual}"] = nueva_url
+                st.markdown("---")
+                st.markdown("##### ✉️ Notificación por correo")
+                enviar_mail_edit = st.checkbox("Enviar correo con las modificaciones")
+                email_notif_edit = st.text_input("Correo destinatario:", value=email_destina_edit)
+                
+                if st.form_submit_button("Guardar Cambios"):
+                    datos_actualizacion = {
+                        "Autor": edit_autor, 
+                        "lugar": edit_lugar, 
+                        "fecha": str(edit_fecha), 
+                        "hora_inicio": edit_hora_inicio.strftime("%H:%M"), 
+                        "hora_fin": edit_hora_fin.strftime("%H:%M"), 
+                        "evento": edit_evento_desc,
+                        "anotaciones": edit_anotaciones
+                    }
 
-                if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
-                    st.cache_data.clear()
-                    if enviar_mail_edit and email_notif_edit.strip():
-                        asunto = f"Actualización de Evento: {edit_autor} en {edit_lugar}"
-                        cuerpo = (
-                            f"Hola,\n\nTe informamos de los cambios en el evento:\n"
-                            f"Autor: {edit_autor}\n"
-                            f"Lugar: {edit_lugar}\n"
-                            f"Fecha: {edit_fecha.strftime('%d/%m/%Y')}\n"
-                            f"Horario: {edit_hora_inicio.strftime('%H:%M')} - {edit_hora_fin.strftime('%H:%M')}\n\n"
-                            f"Un saludo."
-                        )
-                        enviar_email(email_notif_edit.strip(), asunto, cuerpo)
-                    st.success("¡Evento e imagen actualizados correctamente!"); st.rerun()
+                    if edit_cartel_file is not None:
+                        with st.spinner("Subiendo nuevo cartel..."):
+                            nueva_url = subir_a_cloudinary(edit_cartel_file)
+                            if nueva_url:
+                                # FORMATO CORRECTO PARA ADJUNTOS EN AIRTABLE
+                                datos_actualizacion["cartel_url"] = [{"url": nueva_url}]
+                                st.session_state[f"cartel_temp_{id_actual}"] = nueva_url
+
+                    if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
+                        st.cache_data.clear()
+                        if enviar_mail_edit and email_notif_edit.strip():
+                            asunto = f"Actualización de Evento: {edit_autor} en {edit_lugar}"
+                            cuerpo = (
+                                f"Hola,\n\nTe informamos de los cambios en el evento:\n"
+                                f"Autor: {edit_autor}\n"
+                                f"Lugar: {edit_lugar}\n"
+                                f"Fecha: {edit_fecha.strftime('%d/%m/%Y')}\n"
+                                f"Horario: {edit_hora_inicio.strftime('%H:%M')} - {edit_hora_fin.strftime('%H:%M')}\n\n"
+                                f"Un saludo."
+                            )
+                            enviar_email(email_notif_edit.strip(), asunto, cuerpo)
+                        st.success("¡Evento e imagen actualizados correctamente!"); st.rerun()
 
 with tab4:
     st.header("👤 Autores")
@@ -466,7 +477,8 @@ if not df_eventos.empty:
             if url_temp:
                 imagen_final = url_temp
                 st.session_state[f"cartel_temp_{id_sel}"] = url_temp
-                actualizar_dato("eventos", fila["airtable_record_id"], {"cartel_url": url_temp})
+                # FORMATO CORRECTO PARA ADJUNTOS EN AIRTABLE
+                actualizar_dato("eventos", fila["airtable_record_id"], {"cartel_url": [{"url": url_temp}]})
 
     if imagen_final: 
         st.image(imagen_final, width=300)
