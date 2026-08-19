@@ -79,7 +79,7 @@ except Exception:
     st.error("⚠️ Configura las claves de Airtable en los Secrets.")
     st.stop()
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=10)
 def cargar_datos(nombre_tabla):
     url = f"https://api.airtable.com/v0/{base_id}/{nombre_tabla}"
     try:
@@ -192,6 +192,7 @@ with tab2:
                 }
                 if cartel_url_subida:
                     record["cartel_url"] = cartel_url_subida
+                    st.session_state[f"cartel_temp_{nuevo_id}"] = cartel_url_subida
 
                 if guardar_dato("eventos", record):
                     st.cache_data.clear()
@@ -206,6 +207,7 @@ with tab3:
         df_edit["opcion"] = df_edit.apply(lambda r: f"#{int(r['id_num'])} - {r.get('Autor')} ({r.get('fecha')})", axis=1)
         evento_sel = st.selectbox("Selecciona evento", df_edit["opcion"].tolist())
         fila = df_edit[df_edit["opcion"] == evento_sel].iloc[0]
+        id_actual = str(fila.get("id"))
         
         with st.form("form_editar_evento"):
             edit_autor = st.text_input("Autor", value=fila.get("Autor", ""))
@@ -243,6 +245,7 @@ with tab3:
                         nueva_url = subir_a_cloudinary(edit_cartel_file)
                         if nueva_url:
                             datos_actualizacion["cartel_url"] = nueva_url
+                            st.session_state[f"cartel_temp_{id_actual}"] = nueva_url
 
                 if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                     st.cache_data.clear()
@@ -363,6 +366,7 @@ if not df_eventos.empty:
     df_eventos["opcion_menu"] = df_eventos["id"].astype(str) + " - " + df_eventos["evento"].astype(str) + " (" + df_eventos["lugar"].astype(str) + ")"
     evento_elegido = st.selectbox("Selecciona el evento a publicar:", df_eventos["opcion_menu"])
     fila = df_eventos[df_eventos["opcion_menu"] == evento_elegido].iloc[0]
+    id_sel = str(fila.get("id"))
 
     autor_v = str(fila.get('Autor', ''))
     lugar_v = str(fila.get('lugar', ''))
@@ -382,8 +386,9 @@ if not df_eventos.empty:
 
     st.text_area("Mensaje que se publicará:", mensaje_auto, height=150)
 
+    # REVISAR PRIMERO SI TENEMOS URL RECIENTE EN MEMORIA LOCAL, SI NO, USAR AIRTABLE
     cartel_val = fila.get("cartel_url", "")
-    imagen_final = extraer_url_cartel(cartel_val)
+    imagen_final = st.session_state.get(f"cartel_temp_{id_sel}", extraer_url_cartel(cartel_val))
 
     archivo_subido_extra = st.file_uploader("O sube/cambia el cartel localmente aquí:", type=["jpg", "jpeg", "png"], key="extra_subida")
     if archivo_subido_extra is not None:
@@ -391,6 +396,7 @@ if not df_eventos.empty:
             url_temp = subir_a_cloudinary(archivo_subido_extra)
             if url_temp:
                 imagen_final = url_temp
+                st.session_state[f"cartel_temp_{id_sel}"] = url_temp
 
     if imagen_final: 
         st.image(imagen_final, width=300)
