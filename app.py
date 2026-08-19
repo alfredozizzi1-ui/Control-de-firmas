@@ -194,7 +194,9 @@ with tab2:
                     record["cartel_url"] = cartel_url_subida
 
                 if guardar_dato("eventos", record):
-                    st.success("¡Evento guardado con imagen pública!"); st.rerun()
+                    st.cache_data.clear()
+                    st.success("¡Evento guardado con imagen pública!")
+                    st.rerun()
 
 with tab3:
     st.header("Modificar Evento")
@@ -243,7 +245,9 @@ with tab3:
                             datos_actualizacion["cartel_url"] = nueva_url
 
                 if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
-                    st.success("¡Evento e imagen actualizados en Airtable!"); st.rerun()
+                    st.cache_data.clear()
+                    st.success("¡Evento e imagen actualizados en Airtable!")
+                    st.rerun()
 
 with tab4:
     st.header("👤 Autores")
@@ -256,6 +260,7 @@ with tab4:
             else:
                 record = {"Nombre": nuevo_autor_nombre.strip(), "Email": nuevo_autor_email.strip()}
                 if guardar_dato("autores", record):
+                    st.cache_data.clear()
                     st.success(f"¡Autor '{nuevo_autor_nombre}' guardado correctamente!")
                     st.rerun()
                 else:
@@ -274,6 +279,7 @@ with tab5:
             else:
                 record = {"Nombre": nueva_lib_nombre.strip(), "Direccion": nueva_lib_direccion.strip()}
                 if guardar_dato("librerias", record):
+                    st.cache_data.clear()
                     st.success(f"¡Librería '{nueva_lib_nombre}' guardada correctamente!")
                     st.rerun()
                 else:
