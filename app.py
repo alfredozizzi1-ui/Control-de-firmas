@@ -390,20 +390,29 @@ if not df_eventos.empty:
     st.text_area("Mensaje que se publicará:", mensaje_auto, height=150)
 
     cartel_val = fila.get("cartel_url", "")
-    imagen_final = st.session_state.get(f"cartel_temp_{id_sel}", extraer_url_cartel(cartel_val))
+    url_de_airtable = extraer_url_cartel(cartel_val)
+    
+    # OBTENER LA IMAGEN ESPECÍFICA DE ESTE EVENTO
+    imagen_final = st.session_state.get(f"cartel_temp_{id_sel}", url_de_airtable)
 
-    archivo_subido_extra = st.file_uploader("O sube/cambia el cartel localmente aquí:", type=["jpg", "jpeg", "png"], key="extra_subida")
+    archivo_subido_extra = st.file_uploader(
+        "O sube/cambia el cartel localmente aquí:", 
+        type=["jpg", "jpeg", "png"], 
+        key=f"extra_subida_{id_sel}"
+    )
+    
     if archivo_subido_extra is not None:
         with st.spinner("Subiendo cartel a servidor público..."):
             url_temp = subir_a_cloudinary(archivo_subido_extra)
             if url_temp:
                 imagen_final = url_temp
                 st.session_state[f"cartel_temp_{id_sel}"] = url_temp
-                # GUARDAR LA URL EN AIRTABLE DIRECTAMENTE
                 actualizar_dato("eventos", fila["airtable_record_id"], {"cartel_url": url_temp})
 
     if imagen_final: 
         st.image(imagen_final, width=300)
+    else:
+        st.warning("⚠️ Este evento no tiene cartel asignado todavía.")
     
     col_fb, col_ig = st.columns(2)
 
