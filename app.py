@@ -239,13 +239,12 @@ with tab3:
         df_edit["opcion"] = df_edit.apply(lambda r: f"#{int(r['id_num'])} - {r.get('Autor')} ({r.get('fecha')})", axis=1)
         
         opciones_edit = ["--- Selecciona un evento ---"] + df_edit["opcion"].tolist()
-        evento_sel = st.selectbox("Selecciona evento", opciones_edit, key="sel_modificar_evento")
+        
+        # Inicializar el estado de la selección si no existe
+        if "sel_modificar_evento" not in st.session_state:
+            st.session_state.sel_modificar_evento = "--- Selecciona un evento ---"
 
-        if "evento_anterior_edit" not in st.session_state:
-            st.session_state.evento_anterior_edit = evento_sel
-        elif st.session_state.evento_anterior_edit != evento_sel:
-            st.session_state.evento_anterior_edit = evento_sel
-            st.rerun()
+        evento_sel = st.selectbox("Selecciona evento", opciones_edit, key="sel_modificar_evento")
 
         if evento_sel != "--- Selecciona un evento ---":
             fila = df_edit[df_edit["opcion"] == evento_sel].iloc[0]
@@ -304,6 +303,8 @@ with tab3:
 
                     if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                         st.cache_data.clear()
+                        # Resetear el selector para que vuelva al estado inicial tras guardar
+                        st.session_state.sel_modificar_evento = "--- Selecciona un evento ---"
                         if enviar_mail_edit and email_notif_edit.strip():
                             asunto = f"Actualización de Evento: {edit_autor} en {edit_lugar}"
                             cuerpo = (
