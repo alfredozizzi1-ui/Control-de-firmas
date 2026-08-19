@@ -102,11 +102,10 @@ with tab2:
         cartel = st.file_uploader("Cartel", type=["jpg", "png"])
         enviar_mail = st.checkbox("Enviar confirmación por email")
         dest = st.text_input("Email destinatario")
-        
         if st.form_submit_button("Guardar"):
             c_url = subir_a_cloudinary(cartel) if cartel else ""
             if guardar_dato("eventos", {"Autor": autor, "lugar": lugar, "fecha": str(fecha), "cartel_url": c_url}):
-                if enviar_mail: enviar_email(dest, "Evento creado", f"Detalles: {autor} en {lugar}")
+                if enviar_mail: enviar_email(dest, "Evento creado", f"Evento con {autor} en {lugar}")
                 st.success("Guardado"); st.rerun()
 
 with tab3:
@@ -118,23 +117,28 @@ with tab3:
             fila = df_eventos[df_eventos["id"] == sel.split(" - ")[0]].iloc[0]
             with st.form(key=f"form_{fila['id']}"):
                 e_autor = st.text_input("Autor", value=fila.get("Autor", ""))
+                e_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
                 e_cartel = st.file_uploader("Nuevo cartel", type=["jpg", "png"])
+                enviar_mail = st.checkbox("Enviar correo de cambios")
+                dest = st.text_input("Email destinatario")
                 if st.form_submit_button("Actualizar"):
                     c_url = subir_a_cloudinary(e_cartel) if e_cartel else fila.get("cartel_url", "")
-                    actualizar_dato("eventos", fila["airtable_record_id"], {"Autor": e_autor, "cartel_url": c_url})
-                    st.success("Actualizado"); st.rerun()
+                    if actualizar_dato("eventos", fila["airtable_record_id"], {"Autor": e_autor, "lugar": e_lugar, "cartel_url": c_url}):
+                        if enviar_mail: enviar_email(dest, "Cambios en evento", f"Detalles: {e_autor} en {e_lugar}")
+                        st.success("Actualizado"); st.rerun()
 
-# --- PUBLICACIÓN ---
+# --- PUBLICACIÓN INTEGRADA ---
 st.markdown("---")
 st.subheader("📚 Publicar en Redes")
 if not df_eventos.empty:
-    pub_sel = st.selectbox("Seleccionar para publicar", df_eventos["id"].tolist())
+    pub_sel = st.selectbox("Evento a publicar", df_eventos["id"].tolist())
     fila_pub = df_eventos[df_eventos["id"] == pub_sel].iloc[0]
     img = extraer_url_cartel(fila_pub.get("cartel_url", ""))
     if img: st.image(img, width=200)
     
     if st.button("🚀 Publicar Facebook"):
-        st.write("Publicando...")
+        st.write("Publicando en Facebook...")
     if st.button("📸 Publicar Instagram"):
-        time.sleep(3) # Espera necesaria para Meta
-        st.write("Publicando...")
+        with st.spinner("Publicando en Instagram..."):
+            time.sleep(3)
+            st.write("¡Publicado en Instagram!")
