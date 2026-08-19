@@ -18,7 +18,6 @@ if not os.path.exists("carteles"):
 # --- FUNCIÓN DE SUBIDA A CLOUDINARY ---
 # ==========================================
 def subir_a_cloudinary(archivo_file_o_ruta):
-    """ Suba una imagen a Cloudinary (gratis) y devuelve la URL pública directa """
     try:
         cloud_name = st.secrets["cloudinary"]["cloud_name"].strip()
         upload_preset = st.secrets["cloudinary"]["upload_preset"].strip()
@@ -141,11 +140,27 @@ df_librerias = cargar_datos("librerias")
 lista_autores = df_autores["Nombre"].dropna().astype(str).tolist() if not df_autores.empty and "Nombre" in df_autores.columns else []
 lista_librerias = df_librerias["Nombre"].dropna().astype(str).tolist() if not df_librerias.empty and "Nombre" in df_librerias.columns else []
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📅 Listado de Eventos", "➕ Registrar", "✏️ Editar Evento", "👤 Autores", "🏛️ Librerías", "📝 Bloc General"
-])
+# NAVEGACIÓN PRINCIPAL
+opciones_navegacion = [
+    "📅 Listado de Eventos", 
+    "➕ Registrar Evento", 
+    "✏️ Editar Evento", 
+    "👤 Autores", 
+    "🏛️ Librerías", 
+    "📝 Bloc General"
+]
 
-with tab1:
+menu_seleccionado = st.radio(
+    "Navegación", 
+    opciones_navegacion, 
+    horizontal=True, 
+    label_visibility="collapsed"
+)
+
+st.markdown("---")
+
+# 1. LISTADO DE EVENTOS
+if menu_seleccionado == "📅 Listado de Eventos":
     st.header("Eventos Próximos Programados")
     if not df_eventos.empty:
         df_display = df_eventos.copy()
@@ -163,7 +178,8 @@ with tab1:
         df_display = df_display[[c for c in columnas_ordenadas if c in df_display.columns]]
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-with tab2:
+# 2. REGISTRAR EVENTO
+elif menu_seleccionado == "➕ Registrar Evento":
     st.header("Dar de alta un nuevo evento")
     col_sel1, col_sel2 = st.columns(2)
     with col_sel1:
@@ -231,7 +247,8 @@ with tab2:
                         enviar_email(email_notif_reg.strip(), asunto, cuerpo)
                     st.success("¡Evento guardado correctamente!"); st.rerun()
 
-with tab3:
+# 3. EDITAR EVENTO (AL CAMBIAR DE MENÚ SE RESETEA AUTOMÁTICAMENTE)
+elif menu_seleccionado == "✏️ Editar Evento":
     st.header("Modificar Evento")
     if not df_eventos.empty:
         df_edit = df_eventos.copy()
@@ -240,8 +257,7 @@ with tab3:
         
         opciones_edit = ["--- Selecciona un evento ---"] + df_edit["opcion"].tolist()
         
-        # Desplegable para la selección
-        evento_sel = st.selectbox("Selecciona evento", opciones_edit, key="sel_modificar_evento")
+        evento_sel = st.selectbox("Selecciona evento", opciones_edit)
 
         if evento_sel != "--- Selecciona un evento ---":
             fila = df_edit[df_edit["opcion"] == evento_sel].iloc[0]
@@ -300,9 +316,6 @@ with tab3:
 
                     if actualizar_dato("eventos", fila["airtable_record_id"], datos_actualizacion):
                         st.cache_data.clear()
-                        # RESETEO DIRECTO DE LA CLAVE EN EL SESSION STATE
-                        del st.session_state["sel_modificar_evento"]
-                        
                         if enviar_mail_edit and email_notif_edit.strip():
                             asunto = f"Actualización de Evento: {edit_autor} en {edit_lugar}"
                             cuerpo = (
@@ -316,7 +329,8 @@ with tab3:
                             enviar_email(email_notif_edit.strip(), asunto, cuerpo)
                         st.success("¡Evento e imagen actualizados correctamente!"); st.rerun()
 
-with tab4:
+# 4. AUTORES
+elif menu_seleccionado == "👤 Autores":
     st.header("👤 Autores")
     
     col_aut_crear, col_aut_edit = st.columns(2)
@@ -342,7 +356,7 @@ with tab4:
         st.subheader("✏️ Editar Autor Existente")
         if not df_autores.empty and "Nombre" in df_autores.columns:
             opciones_autores = ["--- Selecciona un autor ---"] + sorted(df_autores["Nombre"].dropna().astype(str).tolist())
-            autor_sel_edit = st.selectbox("Selecciona autor a modificar:", opciones_autores, key="sel_editar_autor")
+            autor_sel_edit = st.selectbox("Selecciona autor a modificar:", opciones_autores)
             
             if autor_sel_edit != "--- Selecciona un autor ---":
                 fila_aut = df_autores[df_autores["Nombre"] == autor_sel_edit].iloc[0]
@@ -362,7 +376,6 @@ with tab4:
                             }
                             if actualizar_dato("autores", rec_id_aut, datos_aut):
                                 st.cache_data.clear()
-                                del st.session_state["sel_editar_autor"]
                                 st.success("¡Datos del autor actualizados correctamente!")
                                 st.rerun()
                             else:
@@ -375,7 +388,8 @@ with tab4:
         cols_autores = [c for c in ["Nombre", "Email"] if c in df_autores.columns]
         st.dataframe(df_autores[cols_autores], use_container_width=True, hide_index=True)
 
-with tab5:
+# 5. LIBRERÍAS
+elif menu_seleccionado == "🏛️ Librerías":
     st.header("🏛️ Librerías")
     
     col_lib_crear, col_lib_edit = st.columns(2)
@@ -406,7 +420,7 @@ with tab5:
         st.subheader("✏️ Editar Librería Existente")
         if not df_librerias.empty and "Nombre" in df_librerias.columns:
             opciones_librerias = ["--- Selecciona una librería ---"] + sorted(df_librerias["Nombre"].dropna().astype(str).tolist())
-            lib_sel_edit = st.selectbox("Selecciona librería a modificar:", opciones_librerias, key="sel_editar_libreria")
+            lib_sel_edit = st.selectbox("Selecciona librería a modificar:", opciones_librerias)
             
             if lib_sel_edit != "--- Selecciona una librería ---":
                 fila_lib = df_librerias[df_librerias["Nombre"] == lib_sel_edit].iloc[0]
@@ -428,7 +442,6 @@ with tab5:
                             }
                             if actualizar_dato("librerias", rec_id_lib, datos_lib):
                                 st.cache_data.clear()
-                                del st.session_state["sel_editar_libreria"]
                                 st.success("¡Datos de la librería actualizados correctamente!")
                                 st.rerun()
                             else:
@@ -441,8 +454,10 @@ with tab5:
         cols_librerias = [c for c in ["Nombre", "Direccion", "Email"] if c in df_librerias.columns]
         st.dataframe(df_librerias[cols_librerias], use_container_width=True, hide_index=True)
 
-with tab6:
-    st.header("Bloc General"); st.text_area("Notas", height=300)
+# 6. BLOC GENERAL
+elif menu_seleccionado == "📝 Bloc General":
+    st.header("Bloc General")
+    st.text_area("Notas", height=300)
 
 # ==========================================
 # --- MÓDULOS DE PUBLICACIÓN EN REDES ---
@@ -490,7 +505,6 @@ def publicar_en_instagram(mensaje, imagen_url):
 
         creation_id = data_container.get("id")
 
-        # ESPERA DE 3 SEGUNDOS PARA QUE META PROCESE LA IMAGEN
         time.sleep(3)
 
         # Paso 2: Publicar contenedor
