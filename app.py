@@ -371,7 +371,9 @@ with tab4:
             st.info("No hay autores disponibles para editar.")
 
     st.markdown("---")
-    st.dataframe(df_autores, use_container_width=True, hide_index=True)
+    if not df_autores.empty:
+        cols_autores = [c for c in ["Nombre", "Email"] if c in df_autores.columns]
+        st.dataframe(df_autores[cols_autores], use_container_width=True, hide_index=True)
 
 with tab5:
     st.header("🏛️ Librerías")
@@ -434,7 +436,9 @@ with tab5:
             st.info("No hay librerías disponibles para editar.")
 
     st.markdown("---")
-    st.dataframe(df_librerias, use_container_width=True, hide_index=True)
+    if not df_librerias.empty:
+        cols_librerias = [c for c in ["Nombre", "Direccion", "Email"] if c in df_librerias.columns]
+        st.dataframe(df_librerias[cols_librerias], use_container_width=True, hide_index=True)
 
 with tab6:
     st.header("Bloc General"); st.text_area("Notas", height=300)
