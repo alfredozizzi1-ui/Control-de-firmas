@@ -213,7 +213,6 @@ with tab2:
                     "confirmado": bool(confirmado)
                 }
                 if cartel_url_subida:
-                    # FORMATO CORRECTO PARA ADJUNTOS EN AIRTABLE
                     record["cartel_url"] = [{"url": cartel_url_subida}]
                     st.session_state[f"cartel_temp_{nuevo_id}"] = cartel_url_subida
 
@@ -242,7 +241,6 @@ with tab3:
         opciones_edit = ["--- Selecciona un evento ---"] + df_edit["opcion"].tolist()
         evento_sel = st.selectbox("Selecciona evento", opciones_edit, key="sel_modificar_evento")
 
-        # DETECTAR CAMBIO DE EVENTO PARA LIMPIAR MEMORIA ANTERIOR
         if "evento_anterior_edit" not in st.session_state:
             st.session_state.evento_anterior_edit = evento_sel
         elif st.session_state.evento_anterior_edit != evento_sel:
@@ -301,7 +299,6 @@ with tab3:
                         with st.spinner("Subiendo nuevo cartel..."):
                             nueva_url = subir_a_cloudinary(edit_cartel_file)
                             if nueva_url:
-                                # FORMATO CORRECTO PARA ADJUNTOS EN AIRTABLE
                                 datos_actualizacion["cartel_url"] = [{"url": nueva_url}]
                                 st.session_state[f"cartel_temp_{id_actual}"] = nueva_url
 
@@ -322,40 +319,120 @@ with tab3:
 
 with tab4:
     st.header("👤 Autores")
-    with st.form("form_nuevo_autor", clear_on_submit=True):
-        nuevo_autor_nombre = st.text_input("Nombre y Apellidos del Autor")
-        nuevo_autor_email = st.text_input("Correo electrónico (Opcional)")
-        if st.form_submit_button("➕ Guardar Autor"):
-            if not nuevo_autor_nombre.strip():
-                st.error("El nombre del autor es obligatorio.")
-            else:
-                record = {"Nombre": nuevo_autor_nombre.strip(), "Email": nuevo_autor_email.strip()}
-                if guardar_dato("autores", record):
-                    st.cache_data.clear()
-                    st.success(f"¡Autor '{nuevo_autor_nombre}' guardado correctamente!")
-                    st.rerun()
+    
+    col_aut_crear, col_aut_edit = st.columns(2)
+    
+    with col_aut_crear:
+        st.subheader("➕ Añadir Autor")
+        with st.form("form_nuevo_autor", clear_on_submit=True):
+            nuevo_autor_nombre = st.text_input("Nombre y Apellidos del Autor")
+            nuevo_autor_email = st.text_input("Correo electrónico (Opcional)")
+            if st.form_submit_button("➕ Guardar Autor"):
+                if not nuevo_autor_nombre.strip():
+                    st.error("El nombre del autor es obligatorio.")
                 else:
-                    st.error("Error al guardar en Airtable.")
+                    record = {"Nombre": nuevo_autor_nombre.strip(), "Email": nuevo_autor_email.strip()}
+                    if guardar_dato("autores", record):
+                        st.cache_data.clear()
+                        st.success(f"¡Autor '{nuevo_autor_nombre}' guardado correctamente!")
+                        st.rerun()
+                    else:
+                        st.error("Error al guardar en Airtable.")
+
+    with col_aut_edit:
+        st.subheader("✏️ Editar Autor Existente")
+        if not df_autores.empty and "Nombre" in df_autores.columns:
+            opciones_autores = ["--- Selecciona un autor ---"] + sorted(df_autores["Nombre"].dropna().astype(str).tolist())
+            autor_sel_edit = st.selectbox("Selecciona autor a modificar:", opciones_autores, key="sel_editar_autor")
+            
+            if autor_sel_edit != "--- Selecciona un autor ---":
+                fila_aut = df_autores[df_autores["Nombre"] == autor_sel_edit].iloc[0]
+                rec_id_aut = fila_aut["airtable_record_id"]
+                
+                with st.form(f"form_edit_autor_{rec_id_aut}"):
+                    edit_aut_nombre = st.text_input("Nombre y Apellidos", value=str(fila_aut.get("Nombre", "")))
+                    edit_aut_email = st.text_input("Correo electrónico", value=str(fila_aut.get("Email", "")))
+                    
+                    if st.form_submit_button("💾 Actualizar Autor"):
+                        if not edit_aut_nombre.strip():
+                            st.error("El nombre no puede estar vacío.")
+                        else:
+                            datos_aut = {
+                                "Nombre": edit_aut_nombre.strip(),
+                                "Email": edit_aut_email.strip()
+                            }
+                            if actualizar_dato("autores", rec_id_aut, datos_aut):
+                                st.cache_data.clear()
+                                st.success("¡Datos del autor actualizados correctamente!")
+                                st.rerun()
+                            else:
+                                st.error("Error al actualizar en Airtable.")
+        else:
+            st.info("No hay autores disponibles para editar.")
+
     st.markdown("---")
     st.dataframe(df_autores, use_container_width=True, hide_index=True)
 
 with tab5:
     st.header("🏛️ Librerías")
-    with st.form("form_nueva_libreria", clear_on_submit=True):
-        nueva_lib_nombre = st.text_input("Nombre de la Librería / Punto de venta")
-        nueva_lib_direccion = st.text_input("Dirección / Municipio (Opcional)")
-        nueva_lib_email = st.text_input("Correo electrónico (Opcional)")
-        if st.form_submit_button("➕ Guardar Librería"):
-            if not nueva_lib_nombre.strip():
-                st.error("El nombre de la librería es obligatorio.")
-            else:
-                record = {"Nombre": nueva_lib_nombre.strip(), "Direccion": nueva_lib_direccion.strip(), "Email": nueva_lib_email.strip()}
-                if guardar_dato("librerias", record):
-                    st.cache_data.clear()
-                    st.success(f"¡Librería '{nueva_lib_nombre}' guardada correctamente!")
-                    st.rerun()
+    
+    col_lib_crear, col_lib_edit = st.columns(2)
+    
+    with col_lib_crear:
+        st.subheader("➕ Añadir Librería")
+        with st.form("form_nueva_libreria", clear_on_submit=True):
+            nueva_lib_nombre = st.text_input("Nombre de la Librería / Punto de venta")
+            nueva_lib_direccion = st.text_input("Dirección / Municipio (Opcional)")
+            nueva_lib_email = st.text_input("Correo electrónico (Opcional)")
+            if st.form_submit_button("➕ Guardar Librería"):
+                if not nueva_lib_nombre.strip():
+                    st.error("El nombre de la librería es obligatorio.")
                 else:
-                    st.error("Error al guardar en Airtable.")
+                    record = {
+                        "Nombre": nueva_lib_nombre.strip(), 
+                        "Direccion": nueva_lib_direccion.strip(), 
+                        "Email": nueva_lib_email.strip()
+                    }
+                    if guardar_dato("librerias", record):
+                        st.cache_data.clear()
+                        st.success(f"¡Librería '{nueva_lib_nombre}' guardada correctamente!")
+                        st.rerun()
+                    else:
+                        st.error("Error al guardar en Airtable.")
+
+    with col_lib_edit:
+        st.subheader("✏️ Editar Librería Existente")
+        if not df_librerias.empty and "Nombre" in df_librerias.columns:
+            opciones_librerias = ["--- Selecciona una librería ---"] + sorted(df_librerias["Nombre"].dropna().astype(str).tolist())
+            lib_sel_edit = st.selectbox("Selecciona librería a modificar:", opciones_librerias, key="sel_editar_libreria")
+            
+            if lib_sel_edit != "--- Selecciona una librería ---":
+                fila_lib = df_librerias[df_librerias["Nombre"] == lib_sel_edit].iloc[0]
+                rec_id_lib = fila_lib["airtable_record_id"]
+                
+                with st.form(f"form_edit_lib_{rec_id_lib}"):
+                    edit_lib_nombre = st.text_input("Nombre de la Librería", value=str(fila_lib.get("Nombre", "")))
+                    edit_lib_direccion = st.text_input("Dirección / Municipio", value=str(fila_lib.get("Direccion", "")))
+                    edit_lib_email = st.text_input("Correo electrónico", value=str(fila_lib.get("Email", "")))
+                    
+                    if st.form_submit_button("💾 Actualizar Librería"):
+                        if not edit_lib_nombre.strip():
+                            st.error("El nombre no puede estar vacío.")
+                        else:
+                            datos_lib = {
+                                "Nombre": edit_lib_nombre.strip(),
+                                "Direccion": edit_lib_direccion.strip(),
+                                "Email": edit_lib_email.strip()
+                            }
+                            if actualizar_dato("librerias", rec_id_lib, datos_lib):
+                                st.cache_data.clear()
+                                st.success("¡Datos de la librería actualizados correctamente!")
+                                st.rerun()
+                            else:
+                                st.error("Error al actualizar en Airtable.")
+        else:
+            st.info("No hay librerías disponibles para editar.")
+
     st.markdown("---")
     st.dataframe(df_librerias, use_container_width=True, hide_index=True)
 
@@ -477,7 +554,6 @@ if not df_eventos.empty:
             if url_temp:
                 imagen_final = url_temp
                 st.session_state[f"cartel_temp_{id_sel}"] = url_temp
-                # FORMATO CORRECTO PARA ADJUNTOS EN AIRTABLE
                 actualizar_dato("eventos", fila["airtable_record_id"], {"cartel_url": [{"url": url_temp}]})
 
     if imagen_final: 
