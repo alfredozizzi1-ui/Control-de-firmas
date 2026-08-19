@@ -9,32 +9,41 @@ import time
 
 st.set_page_config(page_title="Control Interno - Firmas de Autores", layout="wide")
 st.title("📋 Control Interno: Firmas de Autores")
-st.caption("Gestión interna sincronizada mediante API directa con Airtable y Cloudinary.")
+st.caption("Gestión interna sincronizada mediante API directa con Airtable.")
 
 if not os.path.exists("carteles"):
     os.makedirs("carteles")
 
 # ==========================================
-# --- FUNCIONES DE SERVICIO ---
+# --- FUNCIÓN DE SUBIDA A CLOUDINARY ---
 # ==========================================
-def subir_a_cloudinary(archivo_file):
-    """ Sube una imagen a Cloudinary y devuelve la URL pública """
+def subir_a_cloudinary(archivo_file_o_ruta):
     try:
         cloud_name = st.secrets["cloudinary"]["cloud_name"].strip()
         upload_preset = st.secrets["cloudinary"]["upload_preset"].strip()
         url = f"https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
-        payload = {"upload_preset": upload_preset}
-        files = {"file": archivo_file.getvalue()}
-        res = requests.post(url, data=payload, files=files)
+        if isinstance(archivo_file_o_ruta, str) and os.path.exists(archivo_file_o_ruta):
+            with open(archivo_file_o_ruta, "rb") as file_data:
+                payload = {"upload_preset": upload_preset}
+                files = {"file": file_data}
+                res = requests.post(url, data=payload, files=files)
+        else:
+            payload = {"upload_preset": upload_preset}
+            files = {"file": archivo_file_o_ruta.getvalue()}
+            res = requests.post(url, data=payload, files=files)
         data = res.json()
-        return data.get("secure_url", "")
+        if res.status_code == 200 and "secure_url" in data:
+            return data["secure_url"]
+        return ""
     except Exception as e:
-        st.error(f"Error en Cloudinary: {e}")
+        st.error(f"Error conectando con Cloudinary: {e}")
         return ""
 
 def extraer_url_cartel(val):
     if isinstance(val, list) and len(val) > 0:
-        return val[0].get("url", "") if isinstance(val[0], dict) else ""
+        primer_item = val[0]
+        if isinstance(primer_item, dict):
+            return primer_item.get("url", "")
     elif isinstance(val, str):
         return val.strip()
     return ""
@@ -87,7 +96,6 @@ def obtener_email_contacto(autor, lugar, df_aut, df_lib):
     email_lugar = next((str(r['Email']) for _, r in df_lib.iterrows() if r['Nombre'] == lugar), "") if not df_lib.empty and 'Email' in df_lib.columns else ""
     return email_aut, email_lugar
 
-# --- UI PRINCIPAL ---
 df_eventos = cargar_datos("eventos")
 df_autores = cargar_datos("autores")
 df_librerias = cargar_datos("librerias")
@@ -101,47 +109,45 @@ with tab1:
 
 with tab2:
     st.header("Registrar Evento")
-    with st.form("nuevo_evento", clear_on_submit=True):
+    with st.form("form_nuevo", clear_on_submit=True):
         autor = st.text_input("Autor")
         lugar = st.text_input("Lugar")
         fecha = st.date_input("Fecha")
         cartel = st.file_uploader("Cartel", type=["jpg", "png"])
-        enviar_mail = st.checkbox("Enviar confirmación por email")
-        dest = st.text_input("Email destinatario")
+        enviar = st.checkbox("Enviar confirmación email")
+        dest = st.text_input("Email")
         if st.form_submit_button("Guardar"):
-            c_url = subir_a_cloudinary(cartel) if cartel else ""
-            data = {"Autor": autor, "lugar": lugar, "fecha": str(fecha)}
-            if c_url: data["cartel_url"] = [{"url": c_url}]
-            if guardar_dato("eventos", data):
-                if enviar_mail and dest: enviar_email(dest, "Nuevo evento", f"Evento con {autor}")
+            c_url = [{"url": subir_a_cloudinary(cartel)}] if cartel else []
+            if guardar_dato("eventos", {"Autor": autor, "lugar": lugar, "fecha": str(fecha), "cartel_url": c_url}):
+                if enviar: enviar_email(dest, "Evento", f"Detalles: {autor} en {lugar}")
                 st.success("Guardado"); st.rerun()
 
 with tab3:
     st.header("Modificar Evento")
     if not df_eventos.empty:
         opciones = ["---"] + df_eventos.apply(lambda r: f"{r['id']} - {r.get('Autor')}", axis=1).tolist()
-        sel = st.selectbox("Seleccionar", opciones, key="sel_edit")
+        sel = st.selectbox("Seleccionar evento:", opciones, key="sel_edit")
         
         if sel != "---":
             fila = df_eventos[df_eventos["id"] == sel.split(" - ")[0]].iloc[0]
-            # Clave dinámica para refrescar el form
-            with st.form(key=f"form_{fila['id']}"):
+            em_aut, em_lib = obtener_email_contacto(fila.get("Autor", ""), fila.get("lugar", ""), df_autores, df_librerias)
+            
+            # Formulario con KEY única por ID para resetear estado
+            with st.form(key=f"form_edit_{fila['airtable_record_id']}"):
                 e_autor = st.text_input("Autor", value=fila.get("Autor", ""))
                 e_lugar = st.text_input("Lugar", value=fila.get("lugar", ""))
-                e_cartel = st.file_uploader("Nuevo cartel", type=["jpg", "png"])
-                enviar_mail = st.checkbox("Enviar correo de cambios")
-                dest = st.text_input("Email destinatario")
+                e_cartel = st.file_uploader("Cambiar cartel", type=["jpg", "png"])
+                e_mail = st.checkbox("Enviar email de cambios")
+                e_dest = st.text_input("Email", value=em_aut or em_lib)
                 
                 if st.form_submit_button("Actualizar"):
                     data = {"Autor": e_autor, "lugar": e_lugar}
-                    if e_cartel: 
-                        c_url = subir_a_cloudinary(e_cartel)
-                        data["cartel_url"] = [{"url": c_url}]
+                    if e_cartel: data["cartel_url"] = [{"url": subir_a_cloudinary(e_cartel)}]
                     if actualizar_dato("eventos", fila["airtable_record_id"], data):
-                        if enviar_mail and dest: enviar_email(dest, "Cambios en evento", f"Detalles: {e_autor}")
+                        if e_mail and e_dest: enviar_email(e_dest, "Cambios", f"Evento actualizado: {e_autor}")
                         st.success("Actualizado"); st.rerun()
 
-# --- PUBLICACIÓN INTEGRADA ---
+# --- PUBLICACIÓN ---
 st.markdown("---")
 st.subheader("📚 Publicar en Redes")
 if not df_eventos.empty:
@@ -153,6 +159,6 @@ if not df_eventos.empty:
     if st.button("🚀 Publicar Facebook"):
         st.write("Publicando...")
     if st.button("📸 Publicar Instagram"):
-        with st.spinner("Publicando en Instagram..."):
+        with st.spinner("Publicando..."):
             time.sleep(3)
             st.write("¡Publicado en Instagram!")
